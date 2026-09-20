@@ -66,6 +66,7 @@
   }
 
   *{box-sizing:border-box;}
+  [hidden]{display:none !important;}
   body{
     margin:0;
     background:var(--bg);
@@ -150,6 +151,23 @@
   .dropzone .hint{font-size:12.5px; color:var(--muted);}
   .dropzone input{display:none;}
   .filename{font-size:13px; color:var(--muted);}
+  .dropzone .check-icon{display:none;}
+  .dropzone.loaded{border-style:solid; border-color:var(--ok); background:var(--ok-bg);}
+  .dropzone.loaded .upload-icon{display:none;}
+  .dropzone.loaded .check-icon{display:block; stroke:var(--ok);}
+  .dropzone.loaded .ttl{color:var(--ok);}
+  .dropzone.error{border-style:solid; border-color:var(--err); background:var(--err-bg);}
+  .dropzone.error .ttl{color:var(--err);}
+
+  .upload-status{
+    display:flex; gap:8px; align-items:flex-start;
+    font-size:13.5px; line-height:1.5; font-weight:500;
+    border-radius:9px; padding:10px 12px; margin-top:14px;
+  }
+  .upload-status.ok{background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok);}
+  .upload-status.warn{background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn);}
+  .upload-status.err{background:var(--err-bg); color:var(--err); border:1px solid var(--err);}
+  .upload-status b{font-weight:700;}
 
   .btnrow{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px;}
   button{
@@ -262,11 +280,14 @@
     <p class="sub">CSV из Bitrix24, разделитель «;», поля в кавычках — как при экспорте списка сделок.</p>
 
     <label class="dropzone" id="dropzone" for="fileInput">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-2"/><path d="M5 12H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2"/></svg>
-      <span class="ttl">Перетащите CSV сюда или нажмите, чтобы выбрать</span>
+      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-2"/><path d="M5 12H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2"/></svg>
+      <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+      <span class="ttl" id="dzTitle">Перетащите CSV сюда или нажмите, чтобы выбрать</span>
       <span class="hint" id="dzHint">.csv из Bitrix24</span>
       <input type="file" id="fileInput" accept=".csv,text/csv">
     </label>
+
+    <div class="upload-status" id="uploadStatus" role="status" aria-live="polite" hidden></div>
 
     <div class="btnrow">
       <button class="btn-primary" id="downloadBankBtn" disabled>Скачать файл для банка (73 поля)</button>
@@ -765,16 +786,86 @@
     document.getElementById("demoBanner").hidden = !isDemo;
   }
 
+  function setDropzoneState(kind, name){
+    dropzone.classList.remove("loaded", "error");
+    var ttl = document.getElementById("dzTitle");
+    var hint = document.getElementById("dzHint");
+    if (kind === "loaded"){
+      dropzone.classList.add("loaded");
+      ttl.textContent = "Файл загружен: " + name;
+      hint.textContent = "Нажмите или перетащите сюда другой файл, чтобы заменить";
+    } else if (kind === "error"){
+      dropzone.classList.add("error");
+      ttl.textContent = "Не удалось обработать файл";
+      hint.textContent = name || "Нажмите или перетащите сюда файл, чтобы попробовать снова";
+    } else {
+      ttl.textContent = "Перетащите CSV сюда или нажмите, чтобы выбрать";
+      hint.textContent = ".csv из Bitrix24";
+    }
+  }
+
+  function showUploadStatus(kind, html){
+    var el = document.getElementById("uploadStatus");
+    el.className = "upload-status " + kind;
+    el.innerHTML = html;
+    el.hidden = false;
+  }
+
+  function hideUploadStatus(){
+    var el = document.getElementById("uploadStatus");
+    el.hidden = true;
+  }
+
   function handleFile(file){
     document.getElementById("fileNameLabel").textContent = file.name;
+    document.getElementById("demoBanner").hidden = true;
     var reader = new FileReader();
     reader.onload = function(e){
-      var parsed = parseBitrixCSV(String(e.target.result));
-      var missingCols = Object.keys(FIELD_MAP).filter(function(k){ return parsed.headers.indexOf(k) === -1; });
-      if (missingCols.length){
-        window.alert("В файле не найдены колонки:\n" + missingCols.join("\n") + "\n\nПоля будут пустыми в результате.");
+      var parsed;
+      try {
+        parsed = parseBitrixCSV(String(e.target.result));
+      } catch (err){
+        setDropzoneState("error", file.name);
+        showUploadStatus("err", "<span>⚠ Не удалось разобрать «" + file.name + "» как CSV. Проверьте, что это выгрузка списка сделок из Bitrix24.</span>");
+        return;
       }
+      if (!parsed.records.length){
+        state.rows = [];
+        resultsPanel.hidden = true;
+        statsEl.hidden = true;
+        document.getElementById("excludedPanel").hidden = true;
+        downloadBtn.disabled = true;
+        downloadBankBtn.disabled = true;
+        setDropzoneState("error", file.name);
+        showUploadStatus("err", "<span>⚠ Файл «" + file.name + "» загружен, но в нём не нашлось ни одной строки со сделкой. Проверьте, что это тот же CSV, что выгружается из списка сделок Bitrix24.</span>");
+        return;
+      }
+      var missingCols = Object.keys(FIELD_MAP).filter(function(k){ return parsed.headers.indexOf(k) === -1; });
       process(parsed.records, false);
+      setDropzoneState("loaded", file.name);
+
+      var ok = document.getElementById("statOk").textContent;
+      var warn = document.getElementById("statWarn").textContent;
+      var err = document.getElementById("statErr").textContent;
+      var excl = document.getElementById("statExcl").textContent;
+      var kind = (+err) ? "err" : ((+warn || +excl) ? "warn" : "ok");
+      var icon = kind === "ok" ? "✓" : "⚠";
+      var html = icon + " <span><b>Файл «" + file.name + "» загружен и обработан.</b> Записей: " + parsed.records.length +
+        " — готовы: " + ok + ", предупреждения: " + warn + ", ошибки: " + err + ", исключено: " + excl + ".</span>";
+      if (missingCols.length){
+        html += "<br>В файле не найдены колонки: " + missingCols.join(", ") + " — соответствующие поля останутся пустыми.";
+        kind = "err";
+      }
+      showUploadStatus(kind, html);
+
+      var anchor = statsEl.hidden ? resultsPanel : statsEl;
+      if (anchor && !anchor.hidden){
+        anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    reader.onerror = function(){
+      setDropzoneState("error", file.name);
+      showUploadStatus("err", "<span>⚠ Не удалось прочитать файл «" + file.name + "». Попробуйте ещё раз.</span>");
     };
     reader.readAsText(file, "UTF-8");
   }
@@ -884,7 +975,10 @@
 
   document.getElementById("loadDemoBtn").addEventListener("click", function(){
     document.getElementById("fileNameLabel").textContent = "";
+    setDropzoneState("default");
+    hideUploadStatus();
     process(demoRecords(), true);
+    if (statsEl && !statsEl.hidden) statsEl.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   downloadBtn.addEventListener("click", function(){
