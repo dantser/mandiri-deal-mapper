@@ -270,7 +270,7 @@
     <div class="steps">
       <div class="step"><b>01</b><span>Переименование полей Bitrix → имена полей MANDIRI CSV (Separated)</span></div>
       <div class="step"><b>02</b><span>Добавление служебных констант и подбор дебетового счёта VELMONT по валюте платежа</span></div>
-      <div class="step"><b>03</b><span>Проверка обязательных полей и лимитов длины; сделки ≥90k USD экв. (запас от порога банка 100k) исключаются отдельным списком</span></div>
+      <div class="step"><b>03</b><span>Проверка обязательных полей, лимитов длины и страны банка по справочнику MANDIRI; сделки, которым нужен Underlying Document, исключаются отдельным списком</span></div>
       <div class="step"><b>04</b><span>Сборка файла для банка: все 73 позиции по спецификации, без заголовка, маркеры M/E</span></div>
     </div>
   </div>
@@ -306,15 +306,15 @@
     <div class="stat ok"><div class="n" id="statOk">0</div><div class="l">Готовы (OK)</div></div>
     <div class="stat warn"><div class="n" id="statWarn">0</div><div class="l">Предупреждения</div></div>
     <div class="stat err"><div class="n" id="statErr">0</div><div class="l">Ошибки</div></div>
-    <div class="stat excl"><div class="n" id="statExcl">0</div><div class="l">Исключено (≥90k USD)</div></div>
+    <div class="stat excl"><div class="n" id="statExcl">0</div><div class="l">Нужен Underlying Doc</div></div>
   </div>
 
   <div class="panel" id="excludedPanel" hidden>
     <h2>Исключено — крупные сделки</h2>
-    <p class="sub">Сумма ≈ выше 90 000 USD (порог банка 100 000 USD, но исключаем с запасом ~10% — наш курс приблизительный и не совпадает 1:1 с курсом банка, у самой границы это уже приводило к пропуску) — источника для Underlying Document Code в Bitrix нет, поэтому эти сделки не попадают в результат и не входят в скачиваемый CSV. Обработайте их отдельно вручную, пока не появится источник кода документа.</p>
+    <p class="sub">Этим сделкам банк требует Underlying Document Code. Признак берётся из флага крупной сделки в Bitrix (на реальной выгрузке он совпал с поведением банка один в один), а если колонки флага нет — по оценке суммы выше ≈22 500 USD (порог LLD/Bank Indonesia — 25 000 USD, берём с запасом на погрешность курса). Сам код документа выдаёт не Bitrix, а KOPRA: Transfer → Underlying Document, где документ заводится и ждёт одобрения банка. Поэтому такие сделки не попадают в файл — проведите их вручную, приложив документ.</p>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>ID (Bitrix)</th><th>Customer Reference</th><th>Получатель</th><th>Валюта</th><th>Сумма</th><th>≈ USD</th></tr></thead>
+        <thead><tr><th>ID (Bitrix)</th><th>Customer Reference</th><th>Получатель</th><th>Валюта</th><th>Сумма</th><th>≈ USD</th><th>Почему исключена</th></tr></thead>
         <tbody id="excludedTbody"></tbody>
       </table>
     </div>
@@ -322,7 +322,7 @@
 
   <div class="panel" id="resultsPanel" hidden>
     <h2>Результат</h2>
-    <p class="sub">Таблица ниже — для проверки глазами (переименованные поля). Для загрузки в MANDIRI используйте кнопку «Скачать файл для банка» — она собирает отдельный файл ровно в 73 позиции формата Separated, без заголовка, с маркерами M/E, и подставляет дефолты банка (SWIFT Method=SPI, Purpose of Transaction=2670 и т.д.) там, где банк реально требует значение, а не только там, где это формально обязательно по спецификации. Красным — не хватает обязательного поля или превышен известный лимит банка. Код банка получателя (SWIFT) и страна банка сверяются банком с его собственным справочником — если он их не узнаёт, форма банка покажет отдельную ошибку по этой строке, которую нужно поправить вручную.</p>
+    <p class="sub">Таблица ниже — для проверки глазами (переименованные поля). Для загрузки в MANDIRI используйте кнопку «Скачать файл для банка» — она собирает отдельный файл ровно в 73 позиции формата Separated, без заголовка, с маркерами M/E, и подставляет дефолты банка (SWIFT Method=SPI, Purpose of Transaction=2670 и т.д.) там, где банк реально требует значение, а не только там, где это формально обязательно по спецификации. Красным — не хватает обязательного поля или превышен известный лимит банка. Страна банка получателя сверяется со справочником MANDIRI (247 значений, снят с формы банка): известные варианты написания приводятся к написанию банка автоматически (жёлтым), неизвестные помечаются красным — банк такую строку отклонит. Код банка (SWIFT) банк проверяет по своему справочнику уже на своей стороне.</p>
     <div class="tablewrap">
       <table>
         <thead><tr id="theadRow"></tr></thead>
@@ -344,7 +344,7 @@
         <h3 style="margin-top:16px;">Дебетовый счёт VELMONT по валюте</h3>
         <div id="acctList"></div>
         <h3 style="margin-top:16px;">Underlying Document Code</h3>
-        <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px; line-height:1.5;">Источника в Bitrix нет. Порог банка — 100 000 USD, но исключаем уже от 90 000 USD (эквивалент по курсу ниже) — с запасом, т.к. наш курс приблизительный и у самой границы это уже приводило к пропуску реальной крупной сделки. Такие сделки показываются отдельным списком «на ручную обработку».</p>
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px; line-height:1.5;">Код выдаёт сам банк: KOPRA → Transfer → Underlying Document (Pending Bank Approval → Approved), в Bitrix его нет. Порог — 25 000 USD (LLD/Bank Indonesia), а не 100 000, как читалось из спецификации: реальная загрузка 21.09.2026 показала, что записи до ≈16 800 USD экв. проходят, а запись на ≈28 700 USD экв. требует документ. Исключаем по флагу крупной сделки из Bitrix, запасной вариант — оценка от 22 500 USD (порог с запасом на курс).</p>
         <div id="fxList"></div>
         <p style="font-size:11px; color:var(--muted); margin:8px 0 0;">Курсы зафиксированы на <span id="fxDate"></span> (xe.com, mid-market) — только для отсечки порога, не для платежа. Со временем устареют, обновляйте вручную.</p>
       </div>
@@ -392,21 +392,31 @@
     "CNY": "1450018535936"
   };
 
-  // Underlying Document Code источника в Bitrix нет — вместо того чтобы
-  // пропускать поле, крупные сделки (порог банка) пока просто исключаются
-  // из результата и показываются отдельным списком "на ручную обработку".
-  // Курсы — на дату 20.09.2026 (xe.com, mid-market), только для отсечки
-  // порога, не для платежа; со временем устареют — обновлять вручную.
-  var BIG_DEAL_THRESHOLD_USD = 100000;
-  // Реальный порог банка — 100 000 USD, но наш курс (xe.com mid-market) не
-  // совпадает 1:1 с тем, что использует банк, поэтому сделки у самой границы
-  // могут ошибочно остаться "не крупными" по нашему расчёту, а банк всё
-  // равно потребует Underlying Document Code (обнаружено 21.09.2026— сделка
-  // с суммой у границы прошла нашу проверку, но была отклонена банком).
-  // Исключаем с запасом — от 90% порога, чтобы такие пограничные случаи
-  // тоже уходили на ручную обработку, а не долетали до формы банка.
+  // Underlying Document Code. Его значение рождается не в Bitrix, а в самом
+  // KOPRA: раздел Transfer → Underlying Document, где документ заводится,
+  // уходит на одобрение банка (Pending Bank Approval → Approved) и только
+  // после этого его можно указать в платеже. Поэтому сделки, которым документ
+  // нужен, из автоматического файла исключаются и обрабатываются вручную.
+  //
+  // Порог — НЕ 100 000 USD (так было записано в спецификации и оказалось
+  // неверным прочтением), а порог LLD/Bank Indonesia ≈ 25 000 USD.
+  // Подтверждено реальной загрузкой 21.09.2026: все записи до ≈16 800 USD
+  // экв. банк принял, а единственная запись на ≈28 700 USD экв. (EUR 25 000)
+  // получила «Underlying Document Code is mandatory».
+  var BIG_DEAL_THRESHOLD_USD = 25000;
+  // Наш курс (xe.com mid-market) не совпадает 1:1 с курсом банка, поэтому
+  // берём запас: исключаем уже от 90% порога, чтобы пограничные сделки
+  // уходили на ручную обработку, а не долетали до банка с ошибкой.
   var BIG_DEAL_SAFETY_MARGIN = 0.9;
   var EXCLUSION_THRESHOLD_USD = BIG_DEAL_THRESHOLD_USD * BIG_DEAL_SAFETY_MARGIN;
+
+  // Основной признак «нужен Underlying Document» — готовый флаг из Bitrix.
+  // На реальной выгрузке (13 сделок, 21.09.2026) он совпал с поведением банка
+  // один в один: все «Нет» банк принял, «Да» — потребовал документ. Он точнее
+  // нашего пересчёта по курсу, поэтому используется первым; пересчёт по курсу
+  // остаётся запасным вариантом, если колонки флага нет в выгрузке.
+  var BIG_DEAL_FLAG_FIELD = "R | CIMB Флаг большой сделки";
+  var BIG_DEAL_FLAG_YES = ["да", "yes", "y", "1", "true", "истина"];
   var FX_RATE_DATE = "20.09.2026";
   var FX_TO_USD = {
     "USD": 1,
@@ -424,6 +434,197 @@
   // несовпадение имени колонки при выгрузке — в обоих случаях строка
   // раньше проходила как "OK" с пустой страной и ушла бы в банк такой же
   // пустой, что и вызывает ошибку на стороне банка.
+  // Справочник стран MANDIRI — извлечён из сохранённой страницы KOPRA
+  // (Transfer to Other Banks → Destination → Country), 247 значений,
+  // ровно в том написании, которое принимает банк. Именно по нему банк
+  // валидирует поле 27 и выдаёт «Beneficiary Bank Country Name is invalid».
+  var MANDIRI_COUNTRIES = [
+    "INDONESIA", "SINGAPORE", "CHINA",
+    "UNITED STATES", "HONG KONG", "AUSTRALIA",
+    "KOREA SELATAN", "UNITED KINGDOM", "JAPAN",
+    "TAIWAN", "MYANMAR", "AFGHANISTAN",
+    "ALBANIA", "ALGERIA", "AMERICAN SAMOA",
+    "ANDORA", "ANGOLA", "ANGUILLA",
+    "ANTARCTICA", "ANTIGUA  BARBUDA", "ARGENTINA",
+    "ARMENIA", "ARUBA", "AUSTRIA",
+    "AZERBAIJAN", "BAHAMAS", "BAHRAIN",
+    "BANGLADESH", "BARBADOS", "BELARUS",
+    "BELGIUM", "BELIZE", "BENIN",
+    "BERMUDA", "BHUTAN", "BOLIVIA",
+    "BOSNIA AND HERZEGOVI", "BOTSWANA", "BOUVET ISLAND",
+    "BRAZIL", "BRITISH INDIAN OCEAN", "BRUNEI D.",
+    "BULGARIA", "BURKINA FASO", "BURUNDI",
+    "CAMBODIA", "CAMEROON", "CANADA",
+    "CAPE VERDE", "CAYMAN ISLANDS", "CEN AFRICAN REP.",
+    "CHAD", "CHILE", "CHRISTMAS ISLAND",
+    "COCOS (KEELING) IS.", "COLOMBIA", "COMOROS",
+    "CONGO", "CONGO CG", "COOK ISLANDS",
+    "COSTA RICA", "COTE DIVOIRE", "CROATIA",
+    "CUBA", "CURACAO", "CYPRUS",
+    "CZECH REPUBLIC", "DENMARK", "DJIBOUTI",
+    "DOMINICA", "DOMINICAN REPUBLIC", "EAST TIMOR",
+    "ECUADOR", "EGYPT", "EL SALVADOR",
+    "EQUATORIAL GUINEA", "ERITREA", "ESTONIA",
+    "ETHIOPIA", "FAEROE ISLANDS", "FALKLAND  ISLAND",
+    "FIJI", "FINLAND", "FRANCE",
+    "FRENCH GUIANA", "FRENCH POLYNESIA", "FRENCH SOUTHERN",
+    "GABON", "GAMBIA", "GEORGIA",
+    "GERMANY", "GHANA", "GIBRALTAR",
+    "GREECE", "GREENLAND", "GRENADA",
+    "GUADELOUPE", "GUAM", "GUATEMALA",
+    "GUERNSEY", "GUINEA", "GUINEA-BISSAU",
+    "GUYANA", "HAITI", "HEARD  MCDONALD IS",
+    "HOLY SEE", "HONDURAS", "HUNGARY",
+    "ICELAND", "INDIA", "IRAN",
+    "IRAQ", "IRELAND", "ISLE OF MAN",
+    "ISRAEL", "ITALY", "JAMAICA",
+    "JERSEY", "JORDAN", "KAZAKHSTAN",
+    "KENYA", "KIRIBATI", "KOREA UTARA",
+    "KUWAIT", "KYRGYZSTAN", "LAO",
+    "LATVIA", "LEBANON", "LESOTHO",
+    "LIBERIA", "LIBYAN ARAB", "LIECHTENSTEIN",
+    "LITHUANIA", "LUXEMBOURG", "Lainnya",
+    "MACAU", "MACEDONIA", "MADAGASCAR",
+    "MALAWI", "MALAYSIA", "MALDIVES",
+    "MALI", "MALTA", "MARSHALL ISLANDS",
+    "MARTINIQUE", "MAURITANIA", "MAURITIUS",
+    "MAYOTTE", "MEXICO", "MICRONESIA",
+    "MOLDOVA", "MONACO", "MONGOLIA",
+    "MONTENEGRO", "MONTSERRAT", "MOROCCO",
+    "MOZAMBIQUE", "NAMIBIA", "NAURU",
+    "NEPAL", "NETH. ANTILLES", "NETHERLANDS",
+    "NEW CALEDONIA", "NEW ZEALAND", "NICARAGUA",
+    "NIGER", "NIGERIA", "NIUE",
+    "NORFOLK ISLAND", "NORTH MARIANA IS", "NORWAY",
+    "OMAN", "PAKISTAN", "PALAU",
+    "PALESTINIAN", "PANAMA", "PANAMA CANAL ZONE",
+    "PAPUA NEW GUINEA", "PARAGUAY", "PERU",
+    "PHILIPPINES", "PITCAIRN", "POLAND",
+    "PORTUGAL", "PUERTO RICO", "QATAR",
+    "REPUBLIC OF SERBIA", "REUNION", "ROMANIA",
+    "RUSSIAN FEDERATION", "RWANDA", "SAINT HELENA",
+    "SAINT KITTS  NEVIS", "SAINT LUCIA", "SAINT PIERRE",
+    "SAINT VINCENT", "SAMOA", "SAN MARINO",
+    "SAO TOME", "SAUDI ARABIA", "SENEGAL",
+    "SEYCHELLES", "SIERRA LEONE", "SLOVAKIA",
+    "SLOVENIA", "SOLOMON ISLANDS", "SOMALIA",
+    "SOUTH AFRICA", "SPAIN", "SRI LANKA",
+    "SUDAN", "SURINAME", "SVALBARD  JAN MAYEN",
+    "SWAZILAND", "SWEDEN", "SWITZERLAND",
+    "SYRIAN ARAB", "TAJIKISTAN", "TANZANIA",
+    "THAILAND", "TIMOR LESTE", "TOGO",
+    "TOKELAU", "TONGA", "TRINIDAD  TOBAGO",
+    "TUNISIA", "TURKEY", "TURKMENISTAN",
+    "TURKS  CAICOS ISLAN", "TUVALU", "UGANDA",
+    "UKRAINE", "UNITED ARAB EMIRATES", "URUGUAY",
+    "US MINOR OUTLAYING", "UZBEKISTAN", "VANUATU",
+    "VENEZUELA", "VIET NAM", "VIRGIN ISLANDS",
+    "VIRGIN ISLANDS VI", "WALLIS  FUTUNA IS", "WESTERN SAHARA",
+    "YEMEN", "YUGOSLAVIA", "ZAMBIA",
+    "ZIMBABWE"
+  ];
+
+  // Частые варианты написания, которые встречаются в Bitrix, но банк их не
+  // принимает — приводим к справочнику автоматически (подстановка показывается
+  // предупреждением в таблице проверки). Подтверждено реальными отказами банка:
+  // «SOUTH KOREA» → KOREA SELATAN, «TURKIYE» → TURKEY (21.09.2026).
+  var COUNTRY_ALIASES = {
+    "SOUTH KOREA": "KOREA SELATAN",
+    "KOREA REPUBLIC OF": "KOREA SELATAN",
+    "REPUBLIC OF KOREA": "KOREA SELATAN",
+    "KOREA SOUTH": "KOREA SELATAN",
+    "NORTH KOREA": "KOREA UTARA",
+    "KOREA NORTH": "KOREA UTARA",
+    "TURKIYE": "TURKEY",
+    "TUERKIYE": "TURKEY",
+    "USA": "UNITED STATES",
+    "US": "UNITED STATES",
+    "UNITED STATES OF AMERICA": "UNITED STATES",
+    "UK": "UNITED KINGDOM",
+    "GREAT BRITAIN": "UNITED KINGDOM",
+    "ENGLAND": "UNITED KINGDOM",
+    "SCOTLAND": "UNITED KINGDOM",
+    "UAE": "UNITED ARAB EMIRATES",
+    "RUSSIA": "RUSSIAN FEDERATION",
+    "VIETNAM": "VIET NAM",
+    "CZECHIA": "CZECH REPUBLIC",
+    "SLOVAK REPUBLIC": "SLOVAKIA",
+    "HOLLAND": "NETHERLANDS",
+    "THE NETHERLANDS": "NETHERLANDS",
+    "MACAO": "MACAU",
+    "BRUNEI": "BRUNEI D.",
+    "BRUNEI DARUSSALAM": "BRUNEI D.",
+    "LAOS": "LAO",
+    "LAO PDR": "LAO",
+    "SYRIA": "SYRIAN ARAB",
+    "LIBYA": "LIBYAN ARAB",
+    "SERBIA": "REPUBLIC OF SERBIA",
+    "PALESTINE": "PALESTINIAN",
+    "VATICAN": "HOLY SEE",
+    "VATICAN CITY": "HOLY SEE",
+    "IVORY COAST": "COTE DIVOIRE",
+    "COTE D IVOIRE": "COTE DIVOIRE",
+    "CENTRAL AFRICAN REPUBLIC": "CEN AFRICAN REP.",
+    "BOSNIA AND HERZEGOVINA": "BOSNIA AND HERZEGOVI",
+    "CABO VERDE": "CAPE VERDE",
+    "ESWATINI": "SWAZILAND",
+    "BURMA": "MYANMAR",
+    "TIMOR-LESTE": "TIMOR LESTE",
+    "MOLDOVA REPUBLIC OF": "MOLDOVA",
+    "TANZANIA UNITED REPUBLIC OF": "TANZANIA",
+    "IRAN ISLAMIC REPUBLIC OF": "IRAN",
+    "HONGKONG": "HONG KONG",
+    "PRC": "CHINA",
+    "PEOPLES REPUBLIC OF CHINA": "CHINA"
+  };
+
+  // Ключ поиска: верхний регистр, без пунктуации, одиночные пробелы.
+  // «ANTIGUA  BARBUDA» (в справочнике банка реально два пробела вместо «&»)
+  // и «ANTIGUA AND BARBUDA» дают один и тот же ключ.
+  function countryKey(v){
+    return String(v === undefined || v === null ? "" : v)
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]+/g, " ")
+      .replace(/\bAND\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  var COUNTRY_INDEX = (function(){
+    var idx = {};
+    MANDIRI_COUNTRIES.forEach(function(c){ idx[countryKey(c)] = c; });
+    Object.keys(COUNTRY_ALIASES).forEach(function(a){
+      var canon = COUNTRY_ALIASES[a];
+      if (idx[countryKey(canon)] === undefined) return;
+      idx[countryKey(a)] = idx[countryKey(canon)];
+    });
+    return idx;
+  })();
+
+  // Возвращает {status, value, from, suggest}:
+  //  ok      — значение уже точно совпадает со справочником банка
+  //  fixed   — подставлено каноническое написание банка (вариант/алиас)
+  //  empty   — пусто
+  //  unknown — в справочнике банка такого нет, платёж отклонят
+  function normalizeCountry(raw){
+    var orig = String(raw === undefined || raw === null ? "" : raw).trim();
+    if (!orig) return { status: "empty", value: "", from: "", suggest: [] };
+    var key = countryKey(orig);
+    var hit = COUNTRY_INDEX[key];
+    if (hit !== undefined){
+      return hit === orig
+        ? { status: "ok", value: hit, from: orig, suggest: [] }
+        : { status: "fixed", value: hit, from: orig, suggest: [] };
+    }
+    // ближайшие кандидаты — по общему префиксу и вхождению подстроки
+    var suggest = MANDIRI_COUNTRIES.filter(function(c){
+      var k = countryKey(c);
+      return k.indexOf(key) === 0 || key.indexOf(k) === 0 ||
+             k.indexOf(key) !== -1 || key.indexOf(k) !== -1;
+    }).slice(0, 3);
+    return { status: "unknown", value: orig, from: orig, suggest: suggest };
+  }
+
   var REQUIRED_FIELDS = [
     "Beneficiary Account No.",
     "Beneficiary Account Name",
@@ -533,6 +734,12 @@
     var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
     out["Debit Account No."] = DEBIT_ACCOUNTS[currKey] || "";
     out["Underlying Document Code"] = "";
+
+    // Страна банка получателя приводится к справочнику банка: банк сверяет
+    // это поле со своим списком и отвергает любое другое написание.
+    var c = normalizeCountry(out["Beneficiary Bank Country/City Name"]);
+    out["Beneficiary Bank Country/City Name"] = c.value;
+    out._country = c;
     return out;
   }
 
@@ -589,9 +796,24 @@
       }
     });
 
+    // Страна банка получателя — сверка со справочником банка (247 значений,
+    // снят с формы KOPRA). Именно это поле давало «Beneficiary Bank Country
+    // Name is invalid» на реальных загрузках.
+    var c = out._country;
+    if (c && c.status === "fixed"){
+      issues.push({ field: "Beneficiary Bank Country/City Name", level: "warn", message: "«" + c.from + "» приведено к написанию банка: «" + c.value + "»" });
+    } else if (c && c.status === "unknown"){
+      issues.push({
+        field: "Beneficiary Bank Country/City Name",
+        level: "err",
+        message: "«" + c.from + "» нет в справочнике стран банка — он отклонит строку" +
+                 (c.suggest && c.suggest.length ? "; возможно: " + c.suggest.join(", ") : "")
+      });
+    }
+
     var usdEq = usdEquivalent(currKey, amt);
     if (usdEq === null && !isNaN(amt) && amt > BIG_DEAL_THRESHOLD_USD){
-      issues.push({ field: "Underlying Document Code", level: "warn", message: "нет курса для валюты " + currKey + " — не удалось проверить порог 100 000 USD, проверьте вручную" });
+      issues.push({ field: "Underlying Document Code", level: "warn", message: "нет курса для валюты " + currKey + " — не удалось проверить порог " + BIG_DEAL_THRESHOLD_USD + " USD, проверьте вручную" });
     }
 
     var hasErr = issues.some(function(i){ return i.level === "err"; });
@@ -625,6 +847,15 @@
     return v.replace(/[\r\n]+/g, " ").replace(/,/g, " ").replace(/\s+/g, " ").trim();
   }
 
+  // Страна банка — особый случай: в справочнике самого банка часть названий
+  // содержит двойной пробел на месте «&» («ANTIGUA  BARBUDA», «TRINIDAD
+  // TOBAGO», «SAINT KITTS  NEVIS»). Схлопывать пробелы здесь нельзя —
+  // отдаём строку ровно в том виде, в каком её показывает форма банка.
+  function sanitizeCountryForBankCSV(v){
+    v = String(v === undefined || v === null ? "" : v);
+    return v.replace(/[\r\n]+/g, " ").replace(/,/g, " ").trim();
+  }
+
   function buildBankRow(out){
     var amt = parseAmount(out["Transfer Amount"]);
     var amtStr = isNaN(amt) ? "" : amt.toFixed(2);
@@ -652,7 +883,7 @@
       "INU",                // 21 FT Services (International)
       f("Beneficiary Bank Code"),           // 22
       "", "", "", "",       // 23–26 Beneficiary Bank Name/Address 1-3 — не заполняем
-      f("Beneficiary Bank Country/City Name"), // 27
+      sanitizeCountryForBankCSV(out["Beneficiary Bank Country/City Name"]), // 27
       "N",                 // 28 Beneficiary Notification Flag — дефолт N, указываем явно (без уведомления)
       "",                  // 29 Benef Notification E-mail — только если 28=Y
       "",                  // 30 Organization Directory Name — пусто = BIC для intl
@@ -664,7 +895,7 @@
       "", "", "", "", "", "",           // 44–49 Instruction Code/Remark 1–3
       "OUR",                // 50 Charge Instruction
       "SPI",               // 51 SWIFT Method / Beneficiary Type — банк реально требует значение (см. ошибку "Swift Method Or Beneficiary Type is mandatory"), несмотря на "О" в спецификации; SPI — дефолт банка для International
-      ""                   // 52 Underlying Document Code — только если > 100k USD (такие сделки исключены заранее)
+      ""                   // 52 Underlying Document Code — нужен от ~25k USD экв.; такие сделки исключены заранее (код выдаёт KOPRA, не Bitrix)
     ].concat(new Array(19).fill(""))  // 53–71 Reserved for future use
      .concat(["E", ""]);              // 72 End of row, 73 Extended Payment Detail
 
@@ -758,7 +989,8 @@
         r.display["Beneficiary Account Name"],
         r.curr,
         r.amt,
-        r.usdEq !== null ? Math.round(r.usdEq) : "?"
+        r.usdEq !== null ? Math.round(r.usdEq) : "?",
+        r.reason || ""
       ].forEach(function(v){
         var td = document.createElement("td");
         td.className = "mono";
@@ -778,8 +1010,24 @@
       var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
       var amt = parseAmount(out["Transfer Amount"]);
       var usdEq = usdEquivalent(currKey, amt);
-      if (usdEq !== null && usdEq > EXCLUSION_THRESHOLD_USD){
-        excluded.push({ display: out, curr: currKey, amt: isNaN(amt) ? "" : amt, usdEq: usdEq });
+
+      // 1) готовый флаг из Bitrix — точнее нашего пересчёта по курсу;
+      // 2) запасной вариант — оценка эквивалента в USD, если колонки нет.
+      var flagRaw = String(src[BIG_DEAL_FLAG_FIELD] === undefined ? "" : src[BIG_DEAL_FLAG_FIELD]).trim().toLowerCase();
+      var hasFlagColumn = src[BIG_DEAL_FLAG_FIELD] !== undefined && flagRaw !== "";
+      var flagged = BIG_DEAL_FLAG_YES.indexOf(flagRaw) !== -1;
+      var overThreshold = usdEq !== null && usdEq > EXCLUSION_THRESHOLD_USD;
+
+      if (flagged || overThreshold){
+        excluded.push({
+          display: out,
+          curr: currKey,
+          amt: isNaN(amt) ? "" : amt,
+          usdEq: usdEq,
+          reason: flagged
+            ? (hasFlagColumn ? "флаг крупной сделки в Bitrix" : "флаг крупной сделки")
+            : "≈ выше " + Math.round(EXCLUSION_THRESHOLD_USD).toLocaleString("ru-RU") + " USD"
+        });
         return;
       }
       var v = validateRecord(out);
