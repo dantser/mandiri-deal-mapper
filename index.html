@@ -1327,7 +1327,31 @@
     }
   }
 
-  // initial state: load demo so the page shows real working state
-  process(demoRecords(), true);
+  // Сброс к чистому состоянию. Вызывается при загрузке страницы, чтобы после
+  // обновления (F5) не оставалось ничего от прошлого файла: браузер может
+  // восстановить выбранный файл в <input type="file">, а раньше здесь ещё и
+  // автоматически подгружались демо-данные — со стороны это выглядело как
+  // «остался старый результат».
+  function resetState(){
+    state.rows = [];
+    tbody.innerHTML = "";
+    theadRow.innerHTML = "";
+    document.getElementById("excludedTbody").innerHTML = "";
+    statsEl.hidden = true;
+    resultsPanel.hidden = true;
+    document.getElementById("excludedPanel").hidden = true;
+    document.getElementById("demoBanner").hidden = true;
+    document.getElementById("fileNameLabel").textContent = "";
+    downloadBtn.disabled = true;
+    downloadBankBtn.disabled = true;
+    ["statTotal","statOk","statWarn","statErr","statExcl"].forEach(function(id){
+      document.getElementById(id).textContent = "0";
+    });
+    try { fileInput.value = ""; } catch(e){}
+    setDropzoneState("default");
+    hideUploadStatus();
+  }
+
+  resetState();
 })();
 </script>
