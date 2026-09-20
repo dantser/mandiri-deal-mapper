@@ -181,12 +181,6 @@
   .btn-ghost{background:transparent; color:var(--ink); border-color:var(--line);}
   .btn-ghost:hover{background:var(--surface-2);}
 
-  .demo-banner{
-    display:flex; gap:8px; align-items:center;
-    font-size:12.5px; color:var(--warn);
-    background:var(--warn-bg); border:1px solid var(--warn);
-    border-radius:9px; padding:8px 12px; margin-top:14px;
-  }
 
   /* stats */
   .stats{
@@ -290,15 +284,10 @@
     <div class="upload-status" id="uploadStatus" role="status" aria-live="polite" hidden></div>
 
     <div class="btnrow">
-      <button class="btn-primary" id="downloadBankBtn" disabled>Скачать файл для банка (73 поля)</button>
-      <button class="btn-ghost" id="downloadBtn" disabled>Скачать таблицу проверки (для себя)</button>
-      <button class="btn-ghost" id="loadDemoBtn">Загрузить демо-данные</button>
+      <button class="btn-primary" id="downloadBankBtn" disabled>Скачать файл для банка</button>
       <span class="filename mono" id="fileNameLabel"></span>
     </div>
 
-    <div class="demo-banner" id="demoBanner" hidden>
-      Показаны демонстрационные данные (вымышленные компании и счета) — загрузите свой файл, чтобы обработать реальные сделки.
-    </div>
   </div>
 
   <div class="stats" id="stats" hidden>
@@ -866,21 +855,6 @@
     return { status: status, issues: issues };
   }
 
-  // ---------- CSV export ----------
-  function toCSV(rows){
-    var cols = OUTPUT_ORDER.concat(["Статус", "Проблемы"]);
-    var lines = [cols.map(csvEscape).join(";")];
-    rows.forEach(function(r){
-      var line = cols.map(function(c){ return csvEscape(r.display[c] !== undefined ? r.display[c] : ""); });
-      lines.push(line.join(";"));
-    });
-    return lines.join("\r\n");
-  }
-  function csvEscape(v){
-    v = String(v === undefined || v === null ? "" : v);
-    return '"' + v.replace(/"/g, '""') + '"';
-  }
-
   // ---------- bank file export: 73-field Separated format ----------
   // Позиции и обязательность — по MANDIRI_CSV_field_mapping.xlsx, лист
   // «Separated (строка платежа)». Строка без заголовка, разделитель ",",
@@ -958,7 +932,6 @@
   var tbody = document.getElementById("tbody");
   var statsEl = document.getElementById("stats");
   var resultsPanel = document.getElementById("resultsPanel");
-  var downloadBtn = document.getElementById("downloadBtn");
   var downloadBankBtn = document.getElementById("downloadBankBtn");
   var mapListEl = document.getElementById("mapList");
   var constListEl = document.getElementById("constList");
@@ -1047,7 +1020,7 @@
     panel.hidden = excluded.length === 0;
   }
 
-  function process(records, isDemo){
+  function process(records){
     var included = [];
     var excluded = [];
     records.forEach(function(src){
@@ -1084,9 +1057,7 @@
     renderExcluded(excluded);
     renderStats(included, excluded);
     resultsPanel.hidden = included.length === 0 && excluded.length === 0;
-    downloadBtn.disabled = included.length === 0;
     downloadBankBtn.disabled = included.length === 0;
-    document.getElementById("demoBanner").hidden = !isDemo;
   }
 
   function setDropzoneState(kind, name){
@@ -1121,7 +1092,6 @@
 
   function handleFile(file){
     document.getElementById("fileNameLabel").textContent = file.name;
-    document.getElementById("demoBanner").hidden = true;
     var reader = new FileReader();
     reader.onload = function(e){
       var parsed;
@@ -1137,14 +1107,13 @@
         resultsPanel.hidden = true;
         statsEl.hidden = true;
         document.getElementById("excludedPanel").hidden = true;
-        downloadBtn.disabled = true;
         downloadBankBtn.disabled = true;
         setDropzoneState("error", file.name);
         showUploadStatus("err", "<span>⚠ Файл «" + file.name + "» загружен, но в нём не нашлось ни одной строки со сделкой. Проверьте, что это тот же CSV, что выгружается из списка сделок Bitrix24.</span>");
         return;
       }
       var missingCols = Object.keys(FIELD_MAP).filter(function(k){ return parsed.headers.indexOf(k) === -1; });
-      process(parsed.records, false);
+      process(parsed.records);
       setDropzoneState("loaded", file.name);
 
       var ok = document.getElementById("statOk").textContent;
@@ -1171,60 +1140,6 @@
       showUploadStatus("err", "<span>⚠ Не удалось прочитать файл «" + file.name + "». Попробуйте ещё раз.</span>");
     };
     reader.readAsText(file, "UTF-8");
-  }
-
-  // ---------- demo data (fictional, not real client data) ----------
-  function demoRecords(){
-    return [
-      {
-        "ID": "90001", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
-        "Название сделки": "LFin-ПРИМЕР-И-1", "Сумма": "48250.00", "Валюта": "Доллар США",
-        "Дата создания": "01.09.2026 10:00:00",
-        "R | (en) Название компании клиента, получающей ликвидность": "EXAMPLE TRADING CO., LTD.",
-        "R | (en) Страна банка клиента, получающего ликвидность": "CHINA",
-        "R | Расчетный счет компании клиента, получающей ликвидность": "000111222333444",
-        "R | (стр) Валюта": "USD",
-        "R | CIMB Remark": "INV-0001 DD 01.09.2026 SUPPLY",
-        "R | CIMB Адрес": "SHANGHAI, CHINA",
-        "R | SWIFT банка клиента, получающего ликвидность": "EXAMPCNBJ"
-      },
-      {
-        "ID": "90002", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
-        "Название сделки": "LFin-ПРИМЕР-Длинное-Название-Сделки-2", "Сумма": "132500.00", "Валюта": "Доллар США",
-        "Дата создания": "02.09.2026 11:00:00",
-        "R | (en) Название компании клиента, получающей ликвидность": "SAMPLE MANUFACTURING PTE LTD",
-        "R | (en) Страна банка клиента, получающего ликвидность": "SINGAPORE",
-        "R | Расчетный счет компании клиента, получающей ликвидность": "9988776655",
-        "R | (стр) Валюта": "USD",
-        "R | CIMB Remark": "INV-0002 DD 02.09.2026 EQPMNT",
-        "R | CIMB Адрес": "Some Very Long Industrial District Street, Building 12, SINGAPORE",
-        "R | SWIFT банка клиента, получающего ликвидность": "SAMPSGSG"
-      },
-      {
-        "ID": "90003", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
-        "Название сделки": "LFin-ПРИМЕР-И-3", "Сумма": "7600.50", "Валюта": "Евро",
-        "Дата создания": "03.09.2026 12:00:00",
-        "R | (en) Название компании клиента, получающей ликвидность": "",
-        "R | (en) Страна банка клиента, получающего ликвидность": "GERMANY",
-        "R | Расчетный счет компании клиента, получающей ликвидность": "DE00123400001234000012",
-        "R | (стр) Валюта": "eur",
-        "R | CIMB Remark": "INV-0003 DD 03.09.2026 SPARES",
-        "R | CIMB Адрес": "BERLIN, GERMANY",
-        "R | SWIFT банка клиента, получающего ликвидность": "SAMPDEFF"
-      },
-      {
-        "ID": "90004", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
-        "Название сделки": "LFin-ПРИМЕР-И-4", "Сумма": "15300.00", "Валюта": "Фунт стерлингов",
-        "Дата создания": "04.09.2026 13:00:00",
-        "R | (en) Название компании клиента, получающей ликвидность": "UK EXAMPLE LTD",
-        "R | (en) Страна банка клиента, получающего ликвидность": "UNITED KINGDOM",
-        "R | Расчетный счет компании клиента, получающей ликвидность": "GB00EXAM00001234567890",
-        "R | (стр) Валюта": "GBP",
-        "R | CIMB Remark": "INV-0004 DD 04.09.2026 SUPPLY",
-        "R | CIMB Адрес": "LONDON, UK",
-        "R | SWIFT банка клиента, получающего ликвидность": "SAMPGB2L"
-      }
-    ];
   }
 
   // ---------- reference panel ----------
@@ -1274,20 +1189,6 @@
   dropzone.addEventListener("drop", function(e){
     var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     if (f) handleFile(f);
-  });
-
-  document.getElementById("loadDemoBtn").addEventListener("click", function(){
-    document.getElementById("fileNameLabel").textContent = "";
-    setDropzoneState("default");
-    hideUploadStatus();
-    process(demoRecords(), true);
-    if (statsEl && !statsEl.hidden) statsEl.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-
-  downloadBtn.addEventListener("click", function(){
-    if (!state.rows.length) return;
-    var csvText = toCSV(state.rows);
-    saveCSV(csvText, "mandiri_mapped_" + new Date().toISOString().slice(0,10) + ".csv");
   });
 
   downloadBankBtn.addEventListener("click", function(){
@@ -1340,9 +1241,7 @@
     statsEl.hidden = true;
     resultsPanel.hidden = true;
     document.getElementById("excludedPanel").hidden = true;
-    document.getElementById("demoBanner").hidden = true;
     document.getElementById("fileNameLabel").textContent = "";
-    downloadBtn.disabled = true;
     downloadBankBtn.disabled = true;
     ["statTotal","statOk","statWarn","statErr","statExcl"].forEach(function(id){
       document.getElementById(id).textContent = "0";
