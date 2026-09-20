@@ -1,0 +1,815 @@
+<title>MANDIRI Deal Mapper</title>
+<meta name="description" content="Переименовывает поля Bitrix24-выгрузки в имена MANDIRI CSV, добавляет константы и проверяет обязательные поля — прямо в браузере, без отправки данных на сервер.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#F4F5F1;
+    --surface:#FFFFFF;
+    --surface-2:#EBEEE7;
+    --ink:#1B2420;
+    --muted:#5B6961;
+    --line:#DCE1D8;
+    --accent:#2F6F5C;
+    --accent-ink:#FFFFFF;
+    --ok:#2C7A55;
+    --ok-bg:#E3F2E8;
+    --warn:#93650E;
+    --warn-bg:#FAEFD9;
+    --err:#AE3A2C;
+    --err-bg:#FBE8E4;
+    --gap:#5C5F82;
+    --gap-bg:#E9E9F3;
+    --focus:#2F6F5C;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#11160F;
+      --surface:#181F19;
+      --surface-2:#20281F;
+      --ink:#E7ECE5;
+      --muted:#93A39A;
+      --line:#2B352C;
+      --accent:#63C39F;
+      --accent-ink:#0A1512;
+      --ok:#6FCB9C;
+      --ok-bg:#17332A;
+      --warn:#E3B24B;
+      --warn-bg:#3A2E14;
+      --err:#E38073;
+      --err-bg:#3A1E1A;
+      --gap:#A9ACD9;
+      --gap-bg:#242640;
+      --focus:#63C39F;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#11160F;
+    --surface:#181F19;
+    --surface-2:#20281F;
+    --ink:#E7ECE5;
+    --muted:#93A39A;
+    --line:#2B352C;
+    --accent:#63C39F;
+    --accent-ink:#0A1512;
+    --ok:#6FCB9C;
+    --ok-bg:#17332A;
+    --warn:#E3B24B;
+    --warn-bg:#3A2E14;
+    --err:#E38073;
+    --err-bg:#3A1E1A;
+    --gap:#A9ACD9;
+    --gap-bg:#242640;
+    --focus:#63C39F;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    padding-inline:16px;
+    padding-block:28px 60px;
+  }
+  h1,h2,h3{font-family:"Spectral",Georgia,serif; margin:0; text-wrap:balance;}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+  a{color:var(--accent);}
+
+  .wrap{max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:22px;}
+
+  /* header */
+  .hero{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px clamp(16px,4vw,32px);
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .eyebrow{
+    font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--accent); font-weight:600;
+  }
+  .hero h1{font-size:clamp(22px,3.4vw,30px); font-weight:600;}
+  .hero p{margin:0; color:var(--muted); max-width:62ch; line-height:1.55;}
+  .steps{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-top:4px;
+  }
+  @media (max-width:640px){ .steps{grid-template-columns:1fr;} }
+  .step{
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+  }
+  .step b{
+    font-family:"IBM Plex Mono",monospace;
+    color:var(--accent);
+    font-size:13px;
+    flex:0 0 auto;
+  }
+  .step span{font-size:13px; color:var(--ink); line-height:1.45;}
+
+  /* upload */
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:clamp(16px,3vw,26px);
+  }
+  .panel h2{font-size:19px; font-weight:600; margin-bottom:4px;}
+  .panel .sub{color:var(--muted); font-size:13.5px; margin:0 0 16px;}
+
+  .dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:12px;
+    padding:28px 16px;
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    cursor:pointer;
+    background:var(--surface-2);
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{border-color:var(--accent); background:var(--ok-bg);}
+  .dropzone svg{width:30px; height:30px; stroke:var(--muted);}
+  .dropzone .ttl{font-weight:600; font-size:14.5px;}
+  .dropzone .hint{font-size:12.5px; color:var(--muted);}
+  .dropzone input{display:none;}
+  .filename{font-size:13px; color:var(--muted);}
+
+  .btnrow{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px;}
+  button{
+    font:inherit; font-weight:600; font-size:13.5px;
+    border-radius:9px; padding:9px 16px; cursor:pointer;
+    border:1px solid transparent;
+  }
+  button:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+  .btn-primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .btn-primary:disabled{opacity:.45; cursor:not-allowed;}
+  .btn-ghost{background:transparent; color:var(--ink); border-color:var(--line);}
+  .btn-ghost:hover{background:var(--surface-2);}
+
+  .demo-banner{
+    display:flex; gap:8px; align-items:center;
+    font-size:12.5px; color:var(--warn);
+    background:var(--warn-bg); border:1px solid var(--warn);
+    border-radius:9px; padding:8px 12px; margin-top:14px;
+  }
+
+  /* stats */
+  .stats{
+    display:grid; grid-template-columns:repeat(5,1fr); gap:10px;
+  }
+  @media (max-width:760px){ .stats{grid-template-columns:repeat(2,1fr);} }
+  .stat{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:2px;
+  }
+  .stat .n{font-family:"Spectral",serif; font-weight:600; font-size:26px;}
+  .stat .l{font-size:12px; color:var(--muted); letter-spacing:.02em;}
+  .stat.ok .n{color:var(--ok);}
+  .stat.warn .n{color:var(--warn);}
+  .stat.err .n{color:var(--err);}
+  .stat.excl .n{color:var(--gap);}
+
+  /* table */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px;}
+  table{border-collapse:collapse; width:100%; min-width:1080px; font-size:12.8px;}
+  thead th{
+    position:sticky; top:0; background:var(--surface-2);
+    text-align:left; padding:9px 10px; font-weight:600;
+    border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  tbody td{
+    padding:8px 10px; border-bottom:1px solid var(--line);
+    white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis;
+    vertical-align:top;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.row-err{background:var(--err-bg);}
+  tbody tr.row-warn{background:var(--warn-bg);}
+  tbody tr:hover{filter:brightness(0.98);}
+
+  .badge{
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:99px;
+    white-space:nowrap;
+  }
+  .badge.ok{background:var(--ok-bg); color:var(--ok);}
+  .badge.warn{background:var(--warn-bg); color:var(--warn);}
+  .badge.err{background:var(--err-bg); color:var(--err);}
+  .badge::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor;}
+
+  .issues-cell{white-space:normal; max-width:320px;}
+  .issue-line{display:block; font-size:11.5px; margin-bottom:2px;}
+  .issue-line.err{color:var(--err);}
+  .issue-line.warn{color:var(--warn);}
+  .issue-line.gap{color:var(--gap);}
+
+  details.reference{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:14px clamp(16px,3vw,26px);
+  }
+  details.reference summary{cursor:pointer; font-weight:600; font-family:"Spectral",serif; font-size:16.5px;}
+  .ref-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:14px;}
+  @media (max-width:760px){ .ref-grid{grid-template-columns:1fr;} }
+  .ref-grid h3{font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; margin-bottom:8px; font-family:"IBM Plex Sans";}
+  .maprow{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:6px 0; border-bottom:1px dashed var(--line);}
+  .maprow:last-child{border-bottom:none;}
+  .maprow .src{color:var(--muted);}
+  .maprow .dst{font-weight:600; text-align:right;}
+  .constrow{display:flex; justify-content:space-between; font-size:12.5px; padding:6px 0; border-bottom:1px dashed var(--line);}
+  .constrow:last-child{border-bottom:none;}
+  .constrow .k{color:var(--muted);}
+  .constrow .v{font-family:"IBM Plex Mono",monospace; font-weight:500;}
+
+  footer{
+    text-align:center; font-size:12px; color:var(--muted); line-height:1.6; padding-top:6px;
+  }
+  .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);}
+</style>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="eyebrow">VELMONT · Bitrix24 → MANDIRI</div>
+    <h1>MANDIRI Deal Mapper</h1>
+    <p>Берёт CSV-выгрузку сделок из Bitrix24 (воронка «Контракт», стадия «Набитие платежа в БК»), переименовывает поля по маппингу MANDIRI, добавляет служебные константы и проверяет, что все обязательные поля заполнены. Всё считается в браузере — файл никуда не отправляется.</p>
+    <div class="steps">
+      <div class="step"><b>01</b><span>Переименование полей Bitrix → имена полей MANDIRI CSV (Separated)</span></div>
+      <div class="step"><b>02</b><span>Добавление служебных констант и подбор дебетового счёта VELMONT по валюте платежа</span></div>
+      <div class="step"><b>03</b><span>Проверка обязательных полей и лимитов длины; сделки >100k USD экв. исключаются отдельным списком</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Загрузить выгрузку</h2>
+    <p class="sub">CSV из Bitrix24, разделитель «;», поля в кавычках — как при экспорте списка сделок.</p>
+
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-2"/><path d="M5 12H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2"/></svg>
+      <span class="ttl">Перетащите CSV сюда или нажмите, чтобы выбрать</span>
+      <span class="hint" id="dzHint">.csv из Bitrix24</span>
+      <input type="file" id="fileInput" accept=".csv,text/csv">
+    </label>
+
+    <div class="btnrow">
+      <button class="btn-primary" id="downloadBtn" disabled>Скачать обработанный CSV</button>
+      <button class="btn-ghost" id="loadDemoBtn">Загрузить демо-данные</button>
+      <span class="filename mono" id="fileNameLabel"></span>
+    </div>
+
+    <div class="demo-banner" id="demoBanner" hidden>
+      Показаны демонстрационные данные (вымышленные компании и счета) — загрузите свой файл, чтобы обработать реальные сделки.
+    </div>
+  </div>
+
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><div class="n" id="statTotal">0</div><div class="l">Всего строк</div></div>
+    <div class="stat ok"><div class="n" id="statOk">0</div><div class="l">Готовы (OK)</div></div>
+    <div class="stat warn"><div class="n" id="statWarn">0</div><div class="l">Предупреждения</div></div>
+    <div class="stat err"><div class="n" id="statErr">0</div><div class="l">Ошибки</div></div>
+    <div class="stat excl"><div class="n" id="statExcl">0</div><div class="l">Исключено (>100k USD)</div></div>
+  </div>
+
+  <div class="panel" id="excludedPanel" hidden>
+    <h2>Исключено — крупные сделки</h2>
+    <p class="sub">Сумма ≈ выше 100 000 USD (по приблизительному курсу) — источника для Underlying Document Code в Bitrix нет, поэтому эти сделки не попадают в результат и не входят в скачиваемый CSV. Обработайте их отдельно вручную, пока не появится источник кода документа.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>ID (Bitrix)</th><th>Customer Reference</th><th>Получатель</th><th>Валюта</th><th>Сумма</th><th>≈ USD</th></tr></thead>
+        <tbody id="excludedTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel" hidden>
+    <h2>Результат</h2>
+    <p class="sub">Красным — не хватает обязательного поля или превышен известный лимит банка. Серым в «Проблемы» — поля, для которых в Bitrix пока нет источника (см. справочник ниже).</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr id="theadRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <details class="reference">
+    <summary>Справочник: маппинг полей и константы</summary>
+    <div class="ref-grid">
+      <div>
+        <h3>Переименование (шаг 1)</h3>
+        <div id="mapList"></div>
+      </div>
+      <div>
+        <h3>Добавляемые константы (шаг 2)</h3>
+        <div id="constList"></div>
+        <h3 style="margin-top:16px;">Дебетовый счёт VELMONT по валюте</h3>
+        <div id="acctList"></div>
+        <h3 style="margin-top:16px;">Underlying Document Code</h3>
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px; line-height:1.5;">Источника в Bitrix нет. Пока что сделки с суммой выше 100 000 USD (или эквивалент по курсу ниже) просто исключаются из результата и показываются отдельным списком «на ручную обработку».</p>
+        <div id="fxList"></div>
+        <p style="font-size:11px; color:var(--muted); margin:8px 0 0;">Курсы зафиксированы на <span id="fxDate"></span> (xe.com, mid-market) — только для отсечки порога, не для платежа. Со временем устареют, обновляйте вручную.</p>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    Обработка полностью локальная — CSV не покидает ваш браузер.<br>
+    Маппинг и лимиты — по состоянию на 20.09.2026, см. проект «mandiri» → gap-analysis.md.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- mapping config ----------
+  var FIELD_MAP = {
+    "Название сделки": "Customer Reference",
+    "R | Расчетный счет компании клиента, получающей ликвидность": "Beneficiary Account No.",
+    "R | (en) Название компании клиента, получающей ликвидность": "Beneficiary Account Name",
+    "R | CIMB Адрес": "Beneficiary Address 1",
+    "R | (стр) Валюта": "Transfer Currency",
+    "Сумма": "Transfer Amount",
+    "R | CIMB Remark": "Transaction Remark",
+    "R | SWIFT банка клиента, получающего ликвидность": "Beneficiary Bank Code",
+    "R | (en) Страна банка клиента, получающего ликвидность": "Beneficiary Bank Country/City Name"
+  };
+
+  var CONSTANTS = [
+    ["Detail Marker", "M"],
+    ["Instruction Mode", "1"],
+    ["FT Services", "INU"],
+    ["Beneficiary Citizenship", "N"],
+    ["Charge Instruction", "OUR"],
+    ["End of row", "E"]
+  ];
+
+  // Дебетовый счёт VELMONT в MANDIRI по валюте платежа — подставляется
+  // автоматически по Transfer Currency (см. скрин от 21.09.2026).
+  var DEBIT_ACCOUNTS = {
+    "USD": "1450018535894",
+    "EUR": "1450019278726",
+    "IDR": "1450018535860",
+    "CNY": "1450018535936"
+  };
+
+  // Underlying Document Code источника в Bitrix нет — вместо того чтобы
+  // пропускать поле, крупные сделки (порог банка) пока просто исключаются
+  // из результата и показываются отдельным списком "на ручную обработку".
+  // Курсы — на дату 20.09.2026 (xe.com, mid-market), только для отсечки
+  // порога, не для платежа; со временем устареют — обновлять вручную.
+  var BIG_DEAL_THRESHOLD_USD = 100000;
+  var FX_RATE_DATE = "20.09.2026";
+  var FX_TO_USD = {
+    "USD": 1,
+    "EUR": 1.1486,     // 1 EUR = 1.1486 USD
+    "CNY": 0.14922,    // 1 USD = 6.7016 CNY
+    "IDR": 0.00005633  // 1 USD = 17 752.75 IDR
+  };
+
+  var REQUIRED_FIELDS = [
+    "Beneficiary Account No.",
+    "Beneficiary Account Name",
+    "Transfer Currency",
+    "Transfer Amount",
+    "Beneficiary Bank Code"
+  ];
+
+  var OUTPUT_ORDER = [
+    "ID (Bitrix)",
+    "Detail Marker",
+    "Instruction Mode",
+    "Debit Account No.",
+    "Beneficiary Account No.",
+    "Beneficiary Account Name",
+    "Beneficiary Address 1",
+    "Transfer Currency",
+    "Transfer Amount",
+    "Transaction Remark",
+    "Customer Reference",
+    "FT Services",
+    "Beneficiary Bank Code",
+    "Beneficiary Bank Country/City Name",
+    "Beneficiary Citizenship",
+    "Charge Instruction",
+    "Underlying Document Code",
+    "End of row"
+  ];
+
+  // ---------- CSV parsing (quote-aware, delimiter auto-detect) ----------
+  function parseCSV(text, delimiter){
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; }
+          else { inQuotes = false; }
+        } else { field += c; }
+      } else {
+        if (c === '"'){ inQuotes = true; }
+        else if (c === delimiter){ row.push(field); field = ""; }
+        else if (c === "\r"){ /* skip */ }
+        else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+        else { field += c; }
+      }
+    }
+    if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+    return rows.filter(function(r){ return !(r.length === 1 && r[0].trim() === ""); });
+  }
+
+  function detectDelimiter(firstLine){
+    var semi = (firstLine.match(/;/g) || []).length;
+    var comma = (firstLine.match(/,/g) || []).length;
+    return semi >= comma ? ";" : ",";
+  }
+
+  function parseBitrixCSV(text){
+    var firstLine = text.split(/\r?\n/)[0] || "";
+    var delim = detectDelimiter(firstLine);
+    var rows = parseCSV(text, delim);
+    if (!rows.length) return { headers: [], records: [] };
+    var headers = rows[0].map(function(h){ return h.trim(); });
+    var records = [];
+    for (var r = 1; r < rows.length; r++){
+      var raw = rows[r];
+      if (raw.every(function(v){ return v.trim() === ""; })) continue;
+      var obj = {};
+      for (var c = 0; c < headers.length; c++){
+        if (!headers[c]) continue;
+        obj[headers[c]] = (raw[c] || "").trim();
+      }
+      records.push(obj);
+    }
+    return { headers: headers, records: records };
+  }
+
+  // ---------- transform + validate ----------
+  function transformRecord(src){
+    var out = {};
+    out["ID (Bitrix)"] = src["ID"] || "";
+    Object.keys(FIELD_MAP).forEach(function(srcKey){
+      out[FIELD_MAP[srcKey]] = src[srcKey] !== undefined ? src[srcKey] : "";
+    });
+    CONSTANTS.forEach(function(pair){ out[pair[0]] = pair[1]; });
+    var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
+    out["Debit Account No."] = DEBIT_ACCOUNTS[currKey] || "";
+    out["Underlying Document Code"] = "";
+    return out;
+  }
+
+  // Приблизительный эквивалент в USD для отсечки крупных сделок.
+  // Возвращает null, если валюта не в FX_TO_USD (курс неизвестен).
+  function usdEquivalent(currKey, amt){
+    var rate = FX_TO_USD[currKey];
+    if (rate === undefined || isNaN(amt)) return null;
+    return amt * rate;
+  }
+
+  function validateRecord(out){
+    var issues = [];
+
+    REQUIRED_FIELDS.forEach(function(f){
+      if (!out[f] || !String(out[f]).trim()){
+        issues.push({ field: f, level: "err", message: "обязательное поле пустое" });
+      }
+    });
+
+    var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
+    if (!out["Debit Account No."]){
+      issues.push({
+        field: "Debit Account No.",
+        level: "err",
+        message: currKey ? "нет счёта VELMONT для валюты " + currKey + " в справочнике — добавьте счёт" : "не определена валюта — счёт не подобран"
+      });
+    }
+
+    var amtRaw = String(out["Transfer Amount"] || "").replace(",", ".");
+    var amt = parseFloat(amtRaw);
+    if (out["Transfer Amount"] && (isNaN(amt) || amt <= 0)){
+      issues.push({ field: "Transfer Amount", level: "err", message: "не похоже на положительное число" });
+    }
+
+    if (out["Transfer Currency"] && !/^[A-Z]{3}$/.test(out["Transfer Currency"])){
+      issues.push({ field: "Transfer Currency", level: "warn", message: "не похоже на ISO-код валюты (3 буквы)" });
+    }
+
+    if (out["Beneficiary Address 1"] && out["Beneficiary Address 1"].length > 35){
+      issues.push({ field: "Beneficiary Address 1", level: "warn", message: "длиннее лимита X(35) на " + (out["Beneficiary Address 1"].length - 35) + " симв." });
+    }
+
+    if (out["Customer Reference"] && out["Customer Reference"].length > 19){
+      issues.push({ field: "Customer Reference", level: "warn", message: "длиннее лимита X(19) на " + (out["Customer Reference"].length - 19) + " симв." });
+    }
+
+    var usdEq = usdEquivalent(currKey, amt);
+    if (usdEq === null && !isNaN(amt) && amt > BIG_DEAL_THRESHOLD_USD){
+      issues.push({ field: "Underlying Document Code", level: "warn", message: "нет курса для валюты " + currKey + " — не удалось проверить порог 100 000 USD, проверьте вручную" });
+    }
+
+    var hasErr = issues.some(function(i){ return i.level === "err"; });
+    var hasWarn = issues.some(function(i){ return i.level === "warn"; });
+    var status = hasErr ? "err" : (hasWarn ? "warn" : "ok");
+    return { status: status, issues: issues };
+  }
+
+  // ---------- CSV export ----------
+  function toCSV(rows){
+    var cols = OUTPUT_ORDER.concat(["Статус", "Проблемы"]);
+    var lines = [cols.map(csvEscape).join(";")];
+    rows.forEach(function(r){
+      var line = cols.map(function(c){ return csvEscape(r.display[c] !== undefined ? r.display[c] : ""); });
+      lines.push(line.join(";"));
+    });
+    return lines.join("\r\n");
+  }
+  function csvEscape(v){
+    v = String(v === undefined || v === null ? "" : v);
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+
+  // ---------- rendering ----------
+  var state = { rows: [] };
+
+  var theadRow = document.getElementById("theadRow");
+  var tbody = document.getElementById("tbody");
+  var statsEl = document.getElementById("stats");
+  var resultsPanel = document.getElementById("resultsPanel");
+  var downloadBtn = document.getElementById("downloadBtn");
+  var mapListEl = document.getElementById("mapList");
+  var constListEl = document.getElementById("constList");
+
+  var STATUS_LABEL = { ok: "OK", warn: "Проверить", err: "Не готово" };
+
+  function buildHeader(){
+    theadRow.innerHTML = "";
+    OUTPUT_ORDER.concat(["Статус", "Проблемы"]).forEach(function(c){
+      var th = document.createElement("th");
+      th.textContent = c;
+      theadRow.appendChild(th);
+    });
+  }
+
+  function renderRows(processed){
+    tbody.innerHTML = "";
+    processed.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.className = r.status === "err" ? "row-err" : (r.status === "warn" ? "row-warn" : "");
+
+      OUTPUT_ORDER.forEach(function(c){
+        var td = document.createElement("td");
+        td.className = "mono";
+        td.textContent = r.display[c] || "";
+        td.title = r.display[c] || "";
+        tr.appendChild(td);
+      });
+
+      var statusTd = document.createElement("td");
+      var badge = document.createElement("span");
+      badge.className = "badge " + r.status;
+      badge.textContent = STATUS_LABEL[r.status];
+      statusTd.appendChild(badge);
+      tr.appendChild(statusTd);
+
+      var issuesTd = document.createElement("td");
+      issuesTd.className = "issues-cell";
+      r.issues.forEach(function(iss){
+        var line = document.createElement("span");
+        line.className = "issue-line " + iss.level;
+        line.textContent = iss.field + ": " + iss.message;
+        issuesTd.appendChild(line);
+      });
+      tr.appendChild(issuesTd);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderStats(processed, excluded){
+    var total = processed.length + excluded.length;
+    var ok = processed.filter(function(r){ return r.status === "ok"; }).length;
+    var warn = processed.filter(function(r){ return r.status === "warn"; }).length;
+    var err = processed.filter(function(r){ return r.status === "err"; }).length;
+    document.getElementById("statTotal").textContent = total;
+    document.getElementById("statOk").textContent = ok;
+    document.getElementById("statWarn").textContent = warn;
+    document.getElementById("statErr").textContent = err;
+    document.getElementById("statExcl").textContent = excluded.length;
+    statsEl.hidden = total === 0;
+  }
+
+  function renderExcluded(excluded){
+    var panel = document.getElementById("excludedPanel");
+    var tbody2 = document.getElementById("excludedTbody");
+    tbody2.innerHTML = "";
+    excluded.forEach(function(r){
+      var tr = document.createElement("tr");
+      [
+        r.display["ID (Bitrix)"],
+        r.display["Customer Reference"],
+        r.display["Beneficiary Account Name"],
+        r.curr,
+        r.amt,
+        r.usdEq !== null ? Math.round(r.usdEq) : "?"
+      ].forEach(function(v){
+        var td = document.createElement("td");
+        td.className = "mono";
+        td.textContent = v === undefined || v === null || v === "" ? "" : v;
+        tr.appendChild(td);
+      });
+      tbody2.appendChild(tr);
+    });
+    panel.hidden = excluded.length === 0;
+  }
+
+  function process(records, isDemo){
+    var included = [];
+    var excluded = [];
+    records.forEach(function(src){
+      var out = transformRecord(src);
+      var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
+      var amt = parseFloat(String(out["Transfer Amount"] || "").replace(",", "."));
+      var usdEq = usdEquivalent(currKey, amt);
+      if (usdEq !== null && usdEq > BIG_DEAL_THRESHOLD_USD){
+        excluded.push({ display: out, curr: currKey, amt: isNaN(amt) ? "" : amt, usdEq: usdEq });
+        return;
+      }
+      var v = validateRecord(out);
+      included.push({ display: out, status: v.status, issues: v.issues });
+    });
+    state.rows = included;
+    buildHeader();
+    renderRows(included);
+    renderExcluded(excluded);
+    renderStats(included, excluded);
+    resultsPanel.hidden = included.length === 0 && excluded.length === 0;
+    downloadBtn.disabled = included.length === 0;
+    document.getElementById("demoBanner").hidden = !isDemo;
+  }
+
+  function handleFile(file){
+    document.getElementById("fileNameLabel").textContent = file.name;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var parsed = parseBitrixCSV(String(e.target.result));
+      var missingCols = Object.keys(FIELD_MAP).filter(function(k){ return parsed.headers.indexOf(k) === -1; });
+      if (missingCols.length){
+        window.alert("В файле не найдены колонки:\n" + missingCols.join("\n") + "\n\nПоля будут пустыми в результате.");
+      }
+      process(parsed.records, false);
+    };
+    reader.readAsText(file, "UTF-8");
+  }
+
+  // ---------- demo data (fictional, not real client data) ----------
+  function demoRecords(){
+    return [
+      {
+        "ID": "90001", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
+        "Название сделки": "LFin-ПРИМЕР-И-1", "Сумма": "48250.00", "Валюта": "Доллар США",
+        "Дата создания": "01.09.2026 10:00:00",
+        "R | (en) Название компании клиента, получающей ликвидность": "EXAMPLE TRADING CO., LTD.",
+        "R | (en) Страна банка клиента, получающего ликвидность": "CHINA",
+        "R | Расчетный счет компании клиента, получающей ликвидность": "000111222333444",
+        "R | (стр) Валюта": "USD",
+        "R | CIMB Remark": "INV-0001 DD 01.09.2026 SUPPLY",
+        "R | CIMB Адрес": "SHANGHAI, CHINA",
+        "R | SWIFT банка клиента, получающего ликвидность": "EXAMPCNBJ"
+      },
+      {
+        "ID": "90002", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
+        "Название сделки": "LFin-ПРИМЕР-Длинное-Название-Сделки-2", "Сумма": "132500.00", "Валюта": "Доллар США",
+        "Дата создания": "02.09.2026 11:00:00",
+        "R | (en) Название компании клиента, получающей ликвидность": "SAMPLE MANUFACTURING PTE LTD",
+        "R | (en) Страна банка клиента, получающего ликвидность": "SINGAPORE",
+        "R | Расчетный счет компании клиента, получающей ликвидность": "9988776655",
+        "R | (стр) Валюта": "USD",
+        "R | CIMB Remark": "INV-0002 DD 02.09.2026 EQPMNT",
+        "R | CIMB Адрес": "Some Very Long Industrial District Street, Building 12, SINGAPORE",
+        "R | SWIFT банка клиента, получающего ликвидность": "SAMPSGSG"
+      },
+      {
+        "ID": "90003", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
+        "Название сделки": "LFin-ПРИМЕР-И-3", "Сумма": "7600.50", "Валюта": "Евро",
+        "Дата создания": "03.09.2026 12:00:00",
+        "R | (en) Название компании клиента, получающей ликвидность": "",
+        "R | (en) Страна банка клиента, получающего ликвидность": "GERMANY",
+        "R | Расчетный счет компании клиента, получающей ликвидность": "DE00123400001234000012",
+        "R | (стр) Валюта": "eur",
+        "R | CIMB Remark": "INV-0003 DD 03.09.2026 SPARES",
+        "R | CIMB Адрес": "BERLIN, GERMANY",
+        "R | SWIFT банка клиента, получающего ликвидность": "SAMPDEFF"
+      },
+      {
+        "ID": "90004", "Тип": "Продажа", "Стадия сделки": "Набитие платежа в БК",
+        "Название сделки": "LFin-ПРИМЕР-И-4", "Сумма": "15300.00", "Валюта": "Фунт стерлингов",
+        "Дата создания": "04.09.2026 13:00:00",
+        "R | (en) Название компании клиента, получающей ликвидность": "UK EXAMPLE LTD",
+        "R | (en) Страна банка клиента, получающего ликвидность": "UNITED KINGDOM",
+        "R | Расчетный счет компании клиента, получающей ликвидность": "GB00EXAM00001234567890",
+        "R | (стр) Валюта": "GBP",
+        "R | CIMB Remark": "INV-0004 DD 04.09.2026 SUPPLY",
+        "R | CIMB Адрес": "LONDON, UK",
+        "R | SWIFT банка клиента, получающего ликвидность": "SAMPGB2L"
+      }
+    ];
+  }
+
+  // ---------- reference panel ----------
+  Object.keys(FIELD_MAP).forEach(function(src){
+    var row = document.createElement("div");
+    row.className = "maprow";
+    row.innerHTML = '<span class="src">' + src + '</span><span class="dst">' + FIELD_MAP[src] + '</span>';
+    mapListEl.appendChild(row);
+  });
+  CONSTANTS.forEach(function(pair){
+    var row = document.createElement("div");
+    row.className = "constrow";
+    row.innerHTML = '<span class="k">' + pair[0] + '</span><span class="v">' + pair[1] + '</span>';
+    constListEl.appendChild(row);
+  });
+  var acctListEl = document.getElementById("acctList");
+  Object.keys(DEBIT_ACCOUNTS).forEach(function(cur){
+    var row = document.createElement("div");
+    row.className = "constrow";
+    row.innerHTML = '<span class="k">' + cur + '</span><span class="v">' + DEBIT_ACCOUNTS[cur] + '</span>';
+    acctListEl.appendChild(row);
+  });
+  var fxListEl = document.getElementById("fxList");
+  Object.keys(FX_TO_USD).forEach(function(cur){
+    if (cur === "USD") return;
+    var row = document.createElement("div");
+    row.className = "constrow";
+    row.innerHTML = '<span class="k">1 ' + cur + '</span><span class="v">' + FX_TO_USD[cur].toFixed(6).replace(/0+$/,"").replace(/\.$/,"") + ' USD</span>';
+    fxListEl.appendChild(row);
+  });
+  var fxDateEl = document.getElementById("fxDate");
+  if (fxDateEl) fxDateEl.textContent = FX_RATE_DATE;
+
+  // ---------- wiring ----------
+  var dropzone = document.getElementById("dropzone");
+  var fileInput = document.getElementById("fileInput");
+
+  fileInput.addEventListener("change", function(e){
+    if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  ["dragenter","dragover"].forEach(function(evt){
+    dropzone.addEventListener(evt, function(e){ e.preventDefault(); dropzone.classList.add("drag"); });
+  });
+  ["dragleave","drop"].forEach(function(evt){
+    dropzone.addEventListener(evt, function(e){ e.preventDefault(); dropzone.classList.remove("drag"); });
+  });
+  dropzone.addEventListener("drop", function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+
+  document.getElementById("loadDemoBtn").addEventListener("click", function(){
+    document.getElementById("fileNameLabel").textContent = "";
+    process(demoRecords(), true);
+  });
+
+  downloadBtn.addEventListener("click", function(){
+    if (!state.rows.length) return;
+    var csvText = toCSV(state.rows);
+    saveCSV(csvText);
+  });
+
+  async function saveCSV(csvText){
+    var downloads = null;
+    try { downloads = await window.claude.use("downloads"); } catch(e){ downloads = null; }
+    var filename = "mandiri_mapped_" + new Date().toISOString().slice(0,10) + ".csv";
+    if (downloads){
+      try{
+        await downloads.save({ filename: filename, data: new Blob([csvText], { type: "text/csv" }) });
+      } catch(err){
+        console.error("download failed", err);
+        window.alert("Не удалось сохранить файл: " + (err && err.message ? err.message : "неизвестная ошибка"));
+      }
+    } else {
+      window.alert("Сохранение файлов недоступно в этом окне просмотра.");
+    }
+  }
+
+  // initial state: load demo so the page shows real working state
+  process(demoRecords(), true);
+})();
+</script>
