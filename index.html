@@ -794,18 +794,34 @@
   });
 
   async function saveCSV(csvText){
-    var downloads = null;
-    try { downloads = await window.claude.use("downloads"); } catch(e){ downloads = null; }
     var filename = "mandiri_mapped_" + new Date().toISOString().slice(0,10) + ".csv";
+    var blob = new Blob([csvText], { type: "text/csv" });
+
+    // Artifact runtime (claude.ai): use the downloads capability when present.
+    var downloads = null;
+    try { downloads = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch(e){ downloads = null; }
     if (downloads){
       try{
-        await downloads.save({ filename: filename, data: new Blob([csvText], { type: "text/csv" }) });
+        await downloads.save({ filename: filename, data: blob });
+        return;
       } catch(err){
-        console.error("download failed", err);
-        window.alert("Не удалось сохранить файл: " + (err && err.message ? err.message : "неизвестная ошибка"));
+        console.error("downloads.save failed, falling back", err);
       }
-    } else {
-      window.alert("Сохранение файлов недоступно в этом окне просмотра.");
+    }
+
+    // Plain browser (GitHub Pages, local file, etc.) — standard download link.
+    try{
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    } catch(err2){
+      console.error("fallback download failed", err2);
+      window.alert("Не удалось сохранить файл: " + (err2 && err2.message ? err2.message : "неизвестная ошибка"));
     }
   }
 
