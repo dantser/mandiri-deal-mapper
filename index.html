@@ -96,6 +96,9 @@
     color:var(--accent); font-weight:600;
   }
   .hero h1{font-size:clamp(22px,3.4vw,30px); font-weight:600;}
+  .hero h2{font-size:19px; font-weight:600;}
+  .hero-panel .eyebrow{margin-bottom:2px;}
+  .hero-panel h1{font-size:clamp(22px,3.4vw,30px); font-weight:600; margin:0 0 6px;}
   .hero p{margin:0; color:var(--muted); max-width:62ch; line-height:1.55;}
   .steps{
     display:grid;
@@ -257,20 +260,9 @@
 
 <div class="wrap">
 
-  <div class="hero">
+  <div class="panel hero-panel">
     <div class="eyebrow">VELMONT · Bitrix24 → MANDIRI</div>
     <h1>MANDIRI Deal Mapper</h1>
-    <p>Берёт CSV-выгрузку сделок из Bitrix24 (воронка «Контракт», стадия «Набитие платежа в БК»), переименовывает поля по маппингу MANDIRI, добавляет служебные константы и собирает итоговый файл ровно в 73 позиции формата Separated — готовый к загрузке в форму «Multiple Transfer by File Upload». Всё считается в браузере — файл никуда не отправляется.</p>
-    <div class="steps">
-      <div class="step"><b>01</b><span>Переименование полей Bitrix → имена полей MANDIRI CSV (Separated)</span></div>
-      <div class="step"><b>02</b><span>Добавление служебных констант и подбор дебетового счёта VELMONT по валюте платежа</span></div>
-      <div class="step"><b>03</b><span>Проверка обязательных полей и страны банка по справочнику MANDIRI, перенос длинного адреса в Address 2/3; сделки, которым нужен Underlying Document, исключаются отдельным списком</span></div>
-      <div class="step"><b>04</b><span>Сборка файла для банка: все 73 позиции по спецификации, без заголовка, маркеры M/E</span></div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Загрузить выгрузку</h2>
     <p class="sub">CSV из Bitrix24, разделитель «;», поля в кавычках — как при экспорте списка сделок.</p>
 
     <label class="dropzone" id="dropzone" for="fileInput">
@@ -317,6 +309,17 @@
         <thead><tr id="theadRow"></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="hero" id="aboutPanel">
+    <h2>Как это работает</h2>
+    <p>Берёт CSV-выгрузку сделок из Bitrix24 (воронка «Контракт», стадия «Набитие платежа в БК»), переименовывает поля по маппингу MANDIRI, добавляет служебные константы и собирает итоговый файл ровно в 73 позиции формата Separated — готовый к загрузке в форму «Multiple Transfer by File Upload». Всё считается в браузере — файл никуда не отправляется.</p>
+    <div class="steps">
+      <div class="step"><b>01</b><span>Переименование полей Bitrix → имена полей MANDIRI CSV (Separated)</span></div>
+      <div class="step"><b>02</b><span>Добавление служебных констант и подбор дебетового счёта VELMONT по валюте платежа</span></div>
+      <div class="step"><b>03</b><span>Проверка обязательных полей и страны банка по справочнику MANDIRI, перенос длинного адреса в Address 2/3; сделки, которым нужен Underlying Document, исключаются отдельным списком</span></div>
+      <div class="step"><b>04</b><span>Сборка файла для банка: все 73 позиции по спецификации, без заголовка, маркеры M/E</span></div>
     </div>
   </div>
 
