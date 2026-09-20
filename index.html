@@ -252,7 +252,7 @@
     <div class="steps">
       <div class="step"><b>01</b><span>Переименование полей Bitrix → имена полей MANDIRI CSV (Separated)</span></div>
       <div class="step"><b>02</b><span>Добавление служебных констант и подбор дебетового счёта VELMONT по валюте платежа</span></div>
-      <div class="step"><b>03</b><span>Проверка обязательных полей и лимитов длины; сделки >100k USD экв. исключаются отдельным списком</span></div>
+      <div class="step"><b>03</b><span>Проверка обязательных полей и лимитов длины; сделки ≥90k USD экв. (запас от порога банка 100k) исключаются отдельным списком</span></div>
       <div class="step"><b>04</b><span>Сборка файла для банка: все 73 позиции по спецификации, без заголовка, маркеры M/E</span></div>
     </div>
   </div>
@@ -285,12 +285,12 @@
     <div class="stat ok"><div class="n" id="statOk">0</div><div class="l">Готовы (OK)</div></div>
     <div class="stat warn"><div class="n" id="statWarn">0</div><div class="l">Предупреждения</div></div>
     <div class="stat err"><div class="n" id="statErr">0</div><div class="l">Ошибки</div></div>
-    <div class="stat excl"><div class="n" id="statExcl">0</div><div class="l">Исключено (>100k USD)</div></div>
+    <div class="stat excl"><div class="n" id="statExcl">0</div><div class="l">Исключено (≥90k USD)</div></div>
   </div>
 
   <div class="panel" id="excludedPanel" hidden>
     <h2>Исключено — крупные сделки</h2>
-    <p class="sub">Сумма ≈ выше 100 000 USD (по приблизительному курсу) — источника для Underlying Document Code в Bitrix нет, поэтому эти сделки не попадают в результат и не входят в скачиваемый CSV. Обработайте их отдельно вручную, пока не появится источник кода документа.</p>
+    <p class="sub">Сумма ≈ выше 90 000 USD (порог банка 100 000 USD, но исключаем с запасом ~10% — наш курс приблизительный и не совпадает 1:1 с курсом банка, у самой границы это уже приводило к пропуску) — источника для Underlying Document Code в Bitrix нет, поэтому эти сделки не попадают в результат и не входят в скачиваемый CSV. Обработайте их отдельно вручную, пока не появится источник кода документа.</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th>ID (Bitrix)</th><th>Customer Reference</th><th>Получатель</th><th>Валюта</th><th>Сумма</th><th>≈ USD</th></tr></thead>
@@ -323,7 +323,7 @@
         <h3 style="margin-top:16px;">Дебетовый счёт VELMONT по валюте</h3>
         <div id="acctList"></div>
         <h3 style="margin-top:16px;">Underlying Document Code</h3>
-        <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px; line-height:1.5;">Источника в Bitrix нет. Пока что сделки с суммой выше 100 000 USD (или эквивалент по курсу ниже) просто исключаются из результата и показываются отдельным списком «на ручную обработку».</p>
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px; line-height:1.5;">Источника в Bitrix нет. Порог банка — 100 000 USD, но исключаем уже от 90 000 USD (эквивалент по курсу ниже) — с запасом, т.к. наш курс приблизительный и у самой границы это уже приводило к пропуску реальной крупной сделки. Такие сделки показываются отдельным списком «на ручную обработку».</p>
         <div id="fxList"></div>
         <p style="font-size:11px; color:var(--muted); margin:8px 0 0;">Курсы зафиксированы на <span id="fxDate"></span> (xe.com, mid-market) — только для отсечки порога, не для платежа. Со временем устареют, обновляйте вручную.</p>
       </div>
@@ -377,6 +377,15 @@
   // Курсы — на дату 20.09.2026 (xe.com, mid-market), только для отсечки
   // порога, не для платежа; со временем устареют — обновлять вручную.
   var BIG_DEAL_THRESHOLD_USD = 100000;
+  // Реальный порог банка — 100 000 USD, но наш курс (xe.com mid-market) не
+  // совпадает 1:1 с тем, что использует банк, поэтому сделки у самой границы
+  // могут ошибочно остаться "не крупными" по нашему расчёту, а банк всё
+  // равно потребует Underlying Document Code (обнаружено 21.09.2026— сделка
+  // с суммой у границы прошла нашу проверку, но была отклонена банком).
+  // Исключаем с запасом — от 90% порога, чтобы такие пограничные случаи
+  // тоже уходили на ручную обработку, а не долетали до формы банка.
+  var BIG_DEAL_SAFETY_MARGIN = 0.9;
+  var EXCLUSION_THRESHOLD_USD = BIG_DEAL_THRESHOLD_USD * BIG_DEAL_SAFETY_MARGIN;
   var FX_RATE_DATE = "20.09.2026";
   var FX_TO_USD = {
     "USD": 1,
@@ -738,7 +747,7 @@
       var currKey = String(out["Transfer Currency"] || "").trim().toUpperCase();
       var amt = parseAmount(out["Transfer Amount"]);
       var usdEq = usdEquivalent(currKey, amt);
-      if (usdEq !== null && usdEq > BIG_DEAL_THRESHOLD_USD){
+      if (usdEq !== null && usdEq > EXCLUSION_THRESHOLD_USD){
         excluded.push({ display: out, curr: currKey, amt: isNaN(amt) ? "" : amt, usdEq: usdEq });
         return;
       }
