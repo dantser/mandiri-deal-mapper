@@ -370,12 +370,10 @@
     "R | (en) Страна банка клиента, получающего ликвидность": "Beneficiary Bank Country/City Name"
   };
 
-  // До 22.09.2026 адрес брали из «R | CIMB Адрес» — там лежит сокращённый
-  // адрес для CIMB (часто только город и страна), из-за чего в банк уходил
-  // неполный адрес. Теперь основной источник — отдельное поле полного адреса
-  // (UF_CRM_DEAL_CLIENT_RECIEVER_COMP_ADDRESS_EN). CIMB-адрес оставлен
-  // запасным вариантом на время, пока новое поле заполнено не у всех сделок.
-  var LEGACY_ADDRESS_FIELD = "R | CIMB Адрес";
+  // Адрес берём только из поля полного адреса
+  // (UF_CRM_DEAL_CLIENT_RECIEVER_COMP_ADDRESS_EN). Раньше источником был
+  // «R | CIMB Адрес», но там лежит сокращённый адрес для CIMB (часто только
+  // город и страна) — в банк уходил неполный адрес, поэтому от него отказались.
 
   var CONSTANTS = [
     ["Detail Marker", "M"],
@@ -631,7 +629,7 @@
   // Версия страницы. Совпадает с номером версии опубликованного артефакта —
   // поднимать при каждой публикации, чтобы было видно, какая версия открыта
   // (особенно когда GitHub Pages отдаёт страницу из кэша).
-  var APP_VERSION = "21";
+  var APP_VERSION = "22";
   var APP_BUILD_DATE = "20.09.2026";
 
   // MT103 Tag 70 (назначение платежа, которое видит получатель) — это поля
@@ -788,16 +786,6 @@
       out[f] = sanitizeForBankCSV(out[f]);
     });
 
-    // Если полного адреса нет — подстраховываемся старым CIMB-адресом,
-    // но помечаем это в таблице проверки: он короткий и в банк уйдёт неполным.
-    if (!String(out["Beneficiary Address 1"] || "").trim()){
-      var legacy = sanitizeForBankCSV(src[LEGACY_ADDRESS_FIELD]);
-      if (legacy){
-        out["Beneficiary Address 1"] = legacy;
-        out._addressFallback = true;
-      }
-    }
-
     // Адрес длиннее лимита X(35) не обрезаем и не ругаемся: банк даёт под
     // адрес три строки (поля 11–13), поэтому переносим хвост по словам
     // в Address 2 и Address 3.
@@ -930,13 +918,7 @@
       issues.push({ field: "Transfer Currency", level: "warn", message: "не похоже на ISO-код валюты (3 буквы)" });
     }
 
-    if (out._addressFallback){
-      issues.push({
-        field: "Beneficiary Address 1",
-        level: "warn",
-        message: "полный адрес не заполнен — взят короткий адрес CIMB"
-      });
-    } else if (!String(out["Beneficiary Address 1"] || "").trim()){
+    if (!String(out["Beneficiary Address 1"] || "").trim()){
       issues.push({
         field: "Beneficiary Address 1",
         level: "warn",
