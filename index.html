@@ -624,7 +624,7 @@
   // Версия страницы. Совпадает с номером версии опубликованного артефакта —
   // поднимать при каждой публикации, чтобы было видно, какая версия открыта
   // (особенно когда GitHub Pages отдаёт страницу из кэша).
-  var APP_VERSION = "18";
+  var APP_VERSION = "19";
   var APP_BUILD_DATE = "20.09.2026";
 
   // MT103 Tag 70 (назначение платежа, которое видит получатель) — это поля
@@ -803,28 +803,75 @@
     return out;
   }
 
-  // Разбивка строки по словам на несколько строк не длиннее limit.
-  // Слово длиннее лимита режется жёстко (иначе его некуда деть).
-  // Возвращает {lines: [...], overflow: "хвост, который не поместился"}.
-  function splitAddress(value, limit, parts){
-    var words = String(value === undefined || value === null ? "" : value).split(/\s+/).filter(Boolean);
+  // Жадная укладка слов в строки шириной width. Служебная для splitAddress.
+  function packWords(words, width){
     var lines = [];
     var cur = "";
     words.forEach(function(w){
-      while (w.length > limit){
+      while (w.length > width){
         if (cur){ lines.push(cur); cur = ""; }
-        lines.push(w.slice(0, limit));
-        w = w.slice(limit);
+        lines.push(w.slice(0, width));
+        w = w.slice(width);
       }
       if (!w) return;
       if (!cur) cur = w;
-      else if ((cur + " " + w).length <= limit) cur += " " + w;
+      else if ((cur + " " + w).length <= width) cur += " " + w;
       else { lines.push(cur); cur = w; }
     });
     if (cur) lines.push(cur);
+    return lines;
+  }
+
+  // Разбивка текста по словам на parts строк не длиннее limit.
+  //
+  // Два нюанса, вскрытых реальными платежами 21–22.09.2026:
+  //  1) банк склеивает строки адреса БЕЗ разделителя («…GANGSEO-GU» + «SEOUL…»
+  //     превратилось в «GANGSEO-GUSEOUL»), поэтому в конец каждой строки, кроме
+  //     последней, добавляем пробел — тогда склейка читается нормально;
+  //  2) в ПУСТУЮ строку адреса банк подставляет своё (в поле 12 — «Jakarta»,
+  //     в поле 13 — «0391»), поэтому раскладываем текст максимально ровно по
+  //     всем строкам, а не набиваем первую под завязку: так пустых строк, куда
+  //     банку есть что дописать, остаётся меньше.
+  // Возвращает {lines: [...], overflow: "хвост, который не поместился"}.
+  function splitAddress(value, limit, parts){
+    var words = String(value === undefined || value === null ? "" : value).split(/\s+/).filter(Boolean);
+    if (!words.length){
+      var empty = [];
+      while (empty.length < parts) empty.push("");
+      return { lines: empty, overflow: "" };
+    }
+
+    // Ищем минимальную ширину, при которой текст ещё укладывается в parts строк:
+    // она и даёт самую ровную раскладку. Начинаем не с единицы, а с длины
+    // самого длинного слова — иначе узкая строка рвала бы слова пополам
+    // (номер инвойса «FDAOPA-26090012/2» разъезжался на две строки).
+    var longest = 0;
+    var total = 0;
+    words.forEach(function(w){
+      if (w.length > longest) longest = w.length;
+      total += w.length + 1;
+    });
+    var start = Math.max(longest, Math.ceil((total - 1) / parts));
+    if (start > limit) start = limit;
+
+    var lines = packWords(words, limit);
+    for (var width = start; width <= limit; width++){
+      var candidate = packWords(words, width);
+      if (candidate.length <= parts){ lines = candidate; break; }
+    }
+
     var kept = lines.slice(0, parts);
     var overflow = lines.slice(parts).join(" ");
     while (kept.length < parts) kept.push("");
+
+    // Пробел-разделитель в конце каждой непоследней заполненной строки.
+    var lastFilled = -1;
+    kept.forEach(function(l, i){ if (l) lastFilled = i; });
+    kept = kept.map(function(l, i){
+      if (l && i < lastFilled && l.length < limit) return l + " ";
+      return l;
+    });
+
     return { lines: kept, overflow: overflow };
   }
 
@@ -921,6 +968,14 @@
   // содержит двойной пробел на месте «&» («ANTIGUA  BARBUDA», «TRINIDAD
   // TOBAGO», «SAINT KITTS  NEVIS»). Схлопывать пробелы здесь нельзя —
   // отдаём строку ровно в том виде, в каком её показывает форма банка.
+  // То же, что sanitizeForBankCSV, но сохраняет один пробел в конце строки:
+  // он нужен, чтобы склейка строк адреса на стороне банка читалась как текст,
+  // а не как «GANGSEO-GUSEOUL».
+  function sanitizeLineForBankCSV(v){
+    var t = sanitizeForBankCSV(v);
+    return /\s$/.test(String(v === undefined || v === null ? "" : v)) && t ? t + " " : t;
+  }
+
   function sanitizeCountryForBankCSV(v){
     v = String(v === undefined || v === null ? "" : v);
     return v.replace(/[\r\n]+/g, " ").replace(/,/g, " ").trim();
@@ -941,9 +996,9 @@
       f("Debit Account No."),               // 8
       f("Beneficiary Account No."),         // 9
       f("Beneficiary Account Name"),        // 10
-      f("Beneficiary Address 1"),           // 11
-      f("Beneficiary Address 2"),           // 12 — продолжение длинного адреса
-      f("Beneficiary Address 3"),           // 13 — продолжение длинного адреса
+      sanitizeLineForBankCSV(out["Beneficiary Address 1"]),  // 11
+      sanitizeLineForBankCSV(out["Beneficiary Address 2"]),  // 12 — продолжение адреса
+      sanitizeLineForBankCSV(out["Beneficiary Address 3"]),  // 13 — продолжение адреса
       f("Transfer Currency"),               // 14
       amtStr,               // 15 Transfer Amount
       "",                  // 16 Remittance Currency — пусто = как Transfer Currency
@@ -967,10 +1022,10 @@
                            //    2670 («Transaksi jasa lainnya»), но по эталонному платежу, набитому
                            //    вручную (21.09.2026), у VELMONT всегда импорт товаров — код 2012.
       "Impor barang",      // 35 Transaction Description — расшифровка кода 2012
-      "", f("Remittance Information 1"),  // 36–37 Remittance Code 1 / Info 1 (MT103 Tag 70)
-      "", f("Remittance Information 2"),  // 38–39
-      "", f("Remittance Information 3"),  // 40–41
-      "", f("Remittance Information 4"),  // 42–43
+      "", sanitizeLineForBankCSV(out["Remittance Information 1"]),  // 36–37 Code 1 / Info 1 (Tag 70)
+      "", sanitizeLineForBankCSV(out["Remittance Information 2"]),  // 38–39
+      "", sanitizeLineForBankCSV(out["Remittance Information 3"]),  // 40–41
+      "", sanitizeLineForBankCSV(out["Remittance Information 4"]),  // 42–43
       "", "", "", "", "", "",           // 44–49 Instruction Code/Remark 1–3
       "OUR",                // 50 Charge Instruction
       "SPI",               // 51 SWIFT Method / Beneficiary Type — банк реально требует значение (см. ошибку "Swift Method Or Beneficiary Type is mandatory"), несмотря на "О" в спецификации; SPI — дефолт банка для International
