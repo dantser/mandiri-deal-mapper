@@ -629,7 +629,7 @@
   // Версия страницы. Совпадает с номером версии опубликованного артефакта —
   // поднимать при каждой публикации, чтобы было видно, какая версия открыта
   // (особенно когда GitHub Pages отдаёт страницу из кэша).
-  var APP_VERSION = "22";
+  var APP_VERSION = "23";
   var APP_BUILD_DATE = "20.09.2026";
 
   // MT103 Tag 70 (назначение платежа, которое видит получатель) — это поля
@@ -782,14 +782,14 @@
     // Текстовые поля сразу приводим к виду, в котором они уйдут в банк:
     // запятые (разделитель полей в файле) меняются на пробел молча — это
     // не проблема данных, а особенность формата, отдельно сообщать не о чем.
+    var rawAddress = out["Beneficiary Address 1"];
     ["Beneficiary Account Name", "Beneficiary Address 1", "Transaction Remark", "Customer Reference"].forEach(function(f){
       out[f] = sanitizeForBankCSV(out[f]);
     });
 
     // Адрес длиннее лимита X(35) не обрезаем и не ругаемся: банк даёт под
-    // адрес три строки (поля 11–13), поэтому переносим хвост по словам
-    // в Address 2 и Address 3.
-    var addr = splitAddress(out["Beneficiary Address 1"], ADDRESS_LINE_LIMIT, 3);
+    // адрес три строки (поля 11–13), поэтому раскладываем его по ним.
+    var addr = splitAddressLines(rawAddress, ADDRESS_LINE_LIMIT, 3);
     out["Beneficiary Address 1"] = addr.lines[0];
     out["Beneficiary Address 2"] = addr.lines[1];
     out["Beneficiary Address 3"] = addr.lines[2];
@@ -825,6 +825,60 @@
     });
     if (cur) lines.push(cur);
     return lines;
+  }
+
+  // Раскладка адреса по строкам банка. Запятые в исходном адресе — это
+  // границы его частей («RM 613, 564, YANGCHEON-RO, GANGSEO-GU, SEOUL,
+  // SOUTH KOREA»), поэтому сначала пробуем резать по ним: тогда стык строк
+  // не попадает внутрь названия («SOUTH.KOREA» превращается в «SOUTH KOREA»
+  // целиком на одной строке). Если частей меньше, чем строк, — раскладываем
+  // по словам, чтобы не оставлять банку пустую строку для его подстановок.
+  function splitAddressLines(value, limit, parts){
+    var raw = String(value === undefined || value === null ? "" : value);
+    var units = raw.split(",").map(function(x){ return sanitizeForBankCSV(x); }).filter(Boolean);
+    if (units.length >= parts){
+      var byUnits = splitUnits(units, limit, parts);
+      if (byUnits) return byUnits;
+    }
+    return splitAddress(sanitizeForBankCSV(raw), limit, parts);
+  }
+
+  // Укладка готовых частей (не разрывая их) ровно в parts строк.
+  // Возвращает null, если так не получается — тогда работает разбивка по словам.
+  function splitUnits(units, limit, parts){
+    for (var width = 1; width <= limit; width++){
+      var lines = [];
+      var cur = "";
+      var ok = true;
+      for (var i = 0; i < units.length; i++){
+        var u = units[i];
+        if (u.length > limit){ ok = false; break; }
+        if (!cur) cur = u;
+        else if ((cur + " " + u).length <= width) cur += " " + u;
+        else { lines.push(cur); cur = u; }
+      }
+      if (!ok) break;
+      if (cur) lines.push(cur);
+      if (lines.length === parts) return { lines: addSeparators(lines, limit), overflow: "" };
+      if (lines.length < parts) break;
+    }
+    return null;
+  }
+
+  // Точка-разделитель в конце каждой непоследней заполненной строки, плюс
+  // заглушка «.» в строках, которые остались пустыми: в пустую строку банк
+  // подставляет своё («Jakarta», «0391»), а в непустую — нет. Заглушку
+  // ставим только если адрес вообще есть: полностью пустой адрес должен
+  // оставаться пустым, чтобы его отсутствие было видно.
+  function addSeparators(lines, limit){
+    var lastFilled = -1;
+    lines.forEach(function(l, i){ if (l) lastFilled = i; });
+    if (lastFilled === -1) return lines;
+    return lines.map(function(l, i){
+      if (!l) return ".";
+      if (i < lastFilled && l.length < limit && !/[.,;:/-]$/.test(l)) return l + ".";
+      return l;
+    });
   }
 
   // Разбивка текста по словам на parts строк не длиннее limit.
@@ -870,17 +924,7 @@
     var overflow = lines.slice(parts).join(" ");
     while (kept.length < parts) kept.push("");
 
-    // Точка-разделитель в конце каждой непоследней заполненной строки —
-    // единственный способ, чтобы склейка на стороне банка не слипалась
-    // в «SOUTHKOREA» (пробел банк обрезает).
-    var lastFilled = -1;
-    kept.forEach(function(l, i){ if (l) lastFilled = i; });
-    kept = kept.map(function(l, i){
-      if (l && i < lastFilled && l.length < limit && !/[.,;:/-]$/.test(l)) return l + ".";
-      return l;
-    });
-
-    return { lines: kept, overflow: overflow };
+    return { lines: addSeparators(kept, limit), overflow: overflow };
   }
 
   // Приблизительный эквивалент в USD для отсечки крупных сделок.
