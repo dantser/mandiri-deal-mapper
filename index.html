@@ -348,7 +348,7 @@
 
   <footer>
     Обработка полностью локальная — CSV не покидает ваш браузер.<br>
-    Маппинг и лимиты — по состоянию на 20.09.2026, см. проект «mandiri» → gap-analysis.md.<br>
+    Маппинг и лимиты — по состоянию на 22.09.2026, см. проект «mandiri» → gap-analysis.md.<br>
     <span class="version mono" id="appVersion"></span>
   </footer>
 </div>
@@ -379,7 +379,6 @@
     ["Detail Marker", "M"],
     ["Instruction Mode", "1"],
     ["FT Services", "INU"],
-    ["Beneficiary Citizenship", "N"],
     ["Charge Instruction", "OUR"],
     ["End of row", "E"]
   ];
@@ -629,8 +628,8 @@
   // Версия страницы. Совпадает с номером версии опубликованного артефакта —
   // поднимать при каждой публикации, чтобы было видно, какая версия открыта
   // (особенно когда GitHub Pages отдаёт страницу из кэша).
-  var APP_VERSION = "23";
-  var APP_BUILD_DATE = "20.09.2026";
+  var APP_VERSION = "25";
+  var APP_BUILD_DATE = "22.09.2026";
 
   // MT103 Tag 70 (назначение платежа, которое видит получатель) — это поля
   // 37/39/41/43 «Remittance Information 1–4», по 30 символов каждое.
@@ -660,6 +659,11 @@
   // Лимит одной строки адреса по спецификации — X(35). Строк под адрес три
   // (поля 11–13), так что длинный адрес переносится, а не обрезается.
   var ADDRESS_LINE_LIMIT = 35;
+
+  // Beneficiary Citizenship (поле 33): Y — резидент Индонезии, N — нерезидент.
+  // Раньше слали константу N, но у VELMONT бывают платежи внутри Индонезии —
+  // для них получатель резидент. Признак берём по стране банка получателя.
+  var RESIDENT_COUNTRY = "INDONESIA";
 
   var REQUIRED_FIELDS = [
     "Beneficiary Account No.",
@@ -778,6 +782,8 @@
     var c = normalizeCountry(out["Beneficiary Bank Country/City Name"]);
     out["Beneficiary Bank Country/City Name"] = sanitizeCountryForBankCSV(c.value);
     out._country = c;
+    out._beneficiaryResident = countryKey(out["Beneficiary Bank Country/City Name"]) === countryKey(RESIDENT_COUNTRY);
+    out["Beneficiary Citizenship"] = out._beneficiaryResident ? "Y" : "N";
 
     // Текстовые поля сразу приводим к виду, в котором они уйдут в банк:
     // запятые (разделитель полей в файле) меняются на пробел молча — это
@@ -1069,7 +1075,7 @@
       "",                  // 29 Benef Notification E-mail — только если 28=Y
       "",                  // 30 Organization Directory Name — пусто = BIC для intl
       "N", "N",             // 31–32 Identical Status / Beneficiary Status — дефолт N по спецификации, указываем явно
-      "N",                  // 33 Beneficiary Citizenship (Non Citizen)
+      (out._beneficiaryResident ? "Y" : "N"), // 33 Beneficiary Citizenship: Y — резидент Индонезии
       "2012",              // 34 Purpose of Transaction — «Impor barang». Раньше стоял дефолт банка
                            //    2670 («Transaksi jasa lainnya»), но по эталонному платежу, набитому
                            //    вручную (21.09.2026), у VELMONT всегда импорт товаров — код 2012.
@@ -1322,6 +1328,13 @@
     row.innerHTML = '<span class="k">' + pair[0] + '</span><span class="v">' + pair[1] + '</span>';
     constListEl.appendChild(row);
   });
+  (function(){
+    var row = document.createElement("div");
+    row.className = "constrow";
+    row.innerHTML = '<span class="k">Beneficiary Citizenship</span>' +
+      '<span class="v">Y, если страна банка = INDONESIA<br>иначе N</span>';
+    constListEl.appendChild(row);
+  })();
   var acctListEl = document.getElementById("acctList");
   Object.keys(DEBIT_ACCOUNTS).forEach(function(cur){
     var row = document.createElement("div");
